@@ -4,7 +4,8 @@
             "name": "Linux",
             "includePath": [
                 "${workspaceFolder}/**",
-                "${config:esp_idf_path}/components/**"
+                "${config:esp_idf_path}/components/**",
+                "${config:esp_idf_path}/components/freertos**"
             ],
             "defines": [
                 "CONFIG_BT_GATTC_ENABLE",

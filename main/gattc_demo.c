@@ -28,8 +28,22 @@
 #include "esp_gatt_common_api.h"
 #include "esp_log.h"
 #include "freertos/FreeRTOS.h"
-
 #include "omron_uuids.h"
+
+// Include Notecard note-c library
+#include <note.h>
+
+// Notecard node-c helper methods
+#include "note_c_hooks.h"
+
+// Uncomment the define below and replace com.your-company:your-product-name
+// with your ProductUID.
+#define PRODUCT_UID "com.zakoverflow.test"
+
+#ifndef PRODUCT_UID
+#define PRODUCT_UID ""
+#pragma message "PRODUCT_UID is not defined in this example. Please ensure your Notecard has a product identifier set before running this example or define it in code here. More details at https://bit.ly/product-uid"
+#endif
 
 #define GATTC_TAG "GATTC_DEMO"
 #define REMOTE_SERVICE_UUID 0x00FF
@@ -49,8 +63,8 @@ typedef struct {
 static const char remote_device_prefix[] = "BLEsmart_00000154";
 volatile static bool connect = false;
 volatile static bool get_server = false;
-volatile static zak_gattc_char_t *char_result = NULL;
-volatile static esp_gattc_descr_elem_t *descr_elem_result = NULL;
+static zak_gattc_char_t *char_result = NULL;
+static esp_gattc_descr_elem_t *descr_elem_result = NULL;
 
 /* Declare static functions */
 static void esp_gap_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param);
@@ -60,11 +74,6 @@ static void gattc_profile_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_
 static esp_bt_uuid_t remote_filter_service_uuid = {
     .len = ESP_UUID_LEN_16,
     .uuid = {.uuid16 = BTSIG_DEV_INFO_SERVICE_UUID},
-};
-
-static esp_bt_uuid_t remote_filter_char_uuid = {
-    .len = ESP_UUID_LEN_16,
-    .uuid = {.uuid16 = OMRON_DIS_SYSTEM_ID_CHAR_R_UUID},
 };
 
 static esp_bt_uuid_t notify_descr_uuid = {
@@ -309,8 +318,9 @@ static void gattc_profile_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_
                 if (!char_result[i].value_loaded && p_data->read.handle == char_result[i].element.char_handle) {
                     // Load the value into the struct
                     char_result[i].value_len = p_data->read.value_len;
-                    char_result[i].value = (uint8_t *)malloc(sizeof(uint8_t) * char_result[i].value_len);
+                    char_result[i].value = (uint8_t *)malloc(sizeof(uint8_t) * char_result[i].value_len + sizeof(uint8_t));
                     char_result[i].value = memcpy(char_result[i].value, p_data->read.value, char_result[i].value_len);
+                    char_result[i].value[char_result[i].value_len] = '\0';
                     char_result[i].value_loaded = true;
 
                     // Add to the load count
@@ -325,9 +335,48 @@ static void gattc_profile_event_handler(esp_gattc_cb_event_t event, esp_gatt_if_
             if (load_count == DIS_CHAR_COUNT) {
                 load_count = 0;
                 ESP_LOGI(GATTC_TAG, "All characteristic values loaded, and ready for transmission.");
-                for (size_t i = 0; i < DIS_CHAR_COUNT; ++i) {
-                    ESP_LOGI(GATTC_TAG, "Characteristic (0x%X) data on Handle %d, Len %d, Value:", char_result[i].element.uuid.uuid.uuid16, char_result[i].element.char_handle, char_result[i].value_len);
-                    esp_log_buffer_hex(GATTC_TAG, char_result[i].value, char_result[i].value_len);
+
+                // Send a Note to Notehub
+                J *req;
+                if ((req = NoteNewRequest("note.add")))
+                {
+                    JAddStringToObject(req, "file", "omron.qo");
+                    JAddBoolToObject(req, "sync", true);
+                    J *body = JAddObjectToObject(req, "body");
+                    if (body) {
+                        char uuid16_buffer[8];
+                        char note_buffer[32];
+                        snprintf(note_buffer, sizeof(note_buffer), "%02X:%02X:%02X:%02X:%02X:%02X", gl_profile_tab[PROFILE_BLM_ID].remote_bda[0], gl_profile_tab[PROFILE_BLM_ID].remote_bda[1], gl_profile_tab[PROFILE_BLM_ID].remote_bda[2], gl_profile_tab[PROFILE_BLM_ID].remote_bda[3], gl_profile_tab[PROFILE_BLM_ID].remote_bda[4], gl_profile_tab[PROFILE_BLM_ID].remote_bda[5]);
+                        JAddStringToObject(body, "Bluetooth Device Address", note_buffer);
+                        ESP_LOGI("NOTE-C", "Bluetooth Device Address: %s", note_buffer);
+                        snprintf(uuid16_buffer, sizeof(uuid16_buffer), "0x%04X", BTSIG_DEV_INFO_SERVICE_UUID);
+                        JAddStringToObject(body, "GATT Service", uuid16_buffer);
+                        ESP_LOGI("NOTE-C", "GATT Service: %s", uuid16_buffer);
+                        for (size_t i = 0; i < DIS_CHAR_COUNT; ++i) {
+                            ESP_LOGI(GATTC_TAG, "Characteristic (0x%X) data on Handle %d, Len %d, Value:", char_result[i].element.uuid.uuid.uuid16, char_result[i].element.char_handle, char_result[i].value_len);
+                            snprintf(uuid16_buffer, sizeof(uuid16_buffer), "0x%04X", char_result[i].element.uuid.uuid.uuid16);
+                            if (OMRON_DIS_SYSTEM_ID_CHAR_R_UUID == char_result[i].element.uuid.uuid.uuid16
+                             || OMRON_DIS_CERT_DATA_CHAR_R_UUID == char_result[i].element.uuid.uuid.uuid16) {
+                                esp_log_buffer_hex(GATTC_TAG, char_result[i].value, char_result[i].value_len);
+                                note_buffer[0] = '0';
+                                note_buffer[1] = 'x';
+                                note_buffer[2] = '\0';
+                                for (size_t j = 0; j < char_result[i].value_len; ++j) {
+                                    sniprintf(note_buffer, sizeof(note_buffer), "%s%02X", note_buffer, char_result[i].value[j]);
+                                }
+                            } else {
+                                ESP_LOGI(GATTC_TAG, "%s", char_result[i].value);
+                                strncpy(note_buffer, (const char *)char_result[i].value, sizeof(note_buffer));
+                            }
+                            JAddStringToObject(body, uuid16_buffer, note_buffer);
+                            ESP_LOGI("NOTE-C", "%s: %s", uuid16_buffer, note_buffer);
+                        }
+                        if (!NoteRequest(req))
+                        {
+                            NoteDebug("Failed to send device information.");
+                            return;
+                        }
+                    }
                 }
             }
         }
@@ -656,6 +705,31 @@ void app_main(void)
         ret = nvs_flash_init();
     }
     ESP_ERROR_CHECK(ret);
+
+    // Initialize note-c hooks
+    NoteSetUserAgent((char *)"note-esp32");
+    NoteSetFn(malloc, free, platform_delay, platform_millis);
+    NoteSetFnDebugOutput(note_log_print);
+    NoteSetFnI2C(NOTE_I2C_ADDR_DEFAULT, NOTE_I2C_MAX_DEFAULT, note_i2c_reset, note_i2c_transmit, note_i2c_receive);
+
+    // Send a Notecard hub.set using note-c
+    J *req;
+    if ((req = NoteNewRequest("hub.set")))
+    {
+        JAddStringToObject(req, "product", PRODUCT_UID);
+        JAddStringToObject(req, "mode", "continuous");
+        JAddStringToObject(req, "sn", "omron-relay");
+        if (!NoteRequest(req))
+        {
+            NoteDebug("Failed to configure Notecard.");
+            return;
+        }
+    }
+    else
+    {
+        NoteDebug("Failed to allocate memory.");
+        return;
+    }
 
     // Initialize the Bluetooth Controller
     ret = initBluetoothController();

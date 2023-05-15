@@ -1,176 +1,119 @@
-# ESP-Prog Debugging in VSCode Sample Repo
+| Supported Targets | ESP32 | ESP32-C2 | ESP32-C3 | ESP32-H2 | ESP32-S3 |
+| ----------------- | ----- | -------- | -------- | -------- | -------- |
 
-This is an example repository to quickly get you debugging an ESP32-based dev
-board with the ESP-Prog programmer in VSCode.
+# ESP-IDF Gatt Client Example
 
-## Features
+This example shows how to use ESP APIs to create a GATT Client.
 
-Includes VSCode tasks out of the box for:
-  - Building firmware
-  - Flashing firmware to your device
-  - Debugging firmware integrated in VSCode
-  - Monitoring your device over serial
-  - Cleaning your build folder
+## How to Use Example
 
-## How To Use This Repo
+Before project configuration and build, be sure to set the correct chip target using:
 
-### New Project
-
-If you are starting a new project from scratch you can clone this repo directly
-and use it as a bare bones base to build on top of. After cloning, follow the
-instructions under the **Setup** and **Configuration** sections below.
-
-### Add To Existing Project
-
-If you already have an existing ESP32 firmware project setup in VSCode it is
-very simple to integrate pieces of this repository into your project. The core
-functionality to enable debugging is provided by 3 files in the **.vscode** folder.
-
-- **launch.json** - Contains the debug configuration
-- **settings.json** - Contains environment-specific paths to various tools
-required for building and debugging
-- **tasks.json** - Defines tasks for building, flashing, monitoring, and debugging
-
-If you don't have any of these files in your existing repo simply copy all of
-them into your **.vscode** folder. If you have a **launch.json** file I highly
-recommend you simply replace it with the file in this repo.
-
-If you already have a `launch.json`, `settings.json`, or `tasks.json` file, then
-you can simply add the contents from the corresponding files in this repo to
-yours.
-
-## Setup
-
-### Install VSCode Dependencies
-
-```none
-Name: C/C++
-Id: ms-vscode.cpptools
-Description: C/C++ IntelliSense, debugging, and code browsing.
-Version: 1.9.7
-Publisher: Microsoft
-VS Marketplace Link: https://marketplace.visualstudio.com/items?itemName=ms-vscode.cpptools
+```bash
+idf.py set-target <chip_name>
 ```
 
-### Clone the ESP-IDF Repo
+To test this example, you first run the [gatt_server_demo](../gatt_server), which creates services and starts advertising. `Gatt_client_demo` will start scanning and connect to the `gatt_server_demo` automatically.
 
-If you don't already have it you will need to clone the ESP-IDF repo to a location
-of your choice on your machine. You will need the path to this location later on.
+This example will enable gatt server's notification function once the connection is established and then the devices start exchanging data.
 
-```sh
-git clone --recursive https://github.com/espressif/esp-idf.git --branch v5.0
+Please, check this [tutorial](tutorial/Gatt_Client_Example_Walkthrough.md) for more information about this example.
+
+### Hardware Required
+
+* A development board with ESP32/ESP32-C3/ESP32-H2/ESP32-C2/ESP32-S3 SoC (e.g., ESP32-DevKitC, ESP-WROVER-KIT, etc.)
+* A USB cable for Power supply and programming
+
+See [Development Boards](https://www.espressif.com/en/products/devkits) for more information about it.
+
+### Build and Flash
+
+Run `idf.py -p PORT flash monitor` to build, flash and monitor the project.
+
+(To exit the serial monitor, type ``Ctrl-]``.)
+
+See the [Getting Started Guide](https://idf.espressif.com/) for full steps to configure and use ESP-IDF to build projects.
+
+### Settings for UUID128
+
+This example works with UUID16 as default. To change to UUID128, follow this steps:
+
+1. Change the UIID16 to UUID128. You can change the UUID according to your needs.
+
+```c
+// Create a new UUID128 (using random values for this example)
+static uint8_t gatts_xxx_uuid128[ESP_UUID_LEN_128] = {0x06, 0x18, 0x7a, 0xec, 0xbe, 0x11, 0x11, 0xea, 0x00, 0x16, 0x02, 0x42, 0x01, 0x13, 0x00, 0x04};
+```
+By adding this new UUID128, you can remove the `#define` macros with the old UUID16.
+
+2. Change the structure to:
+
+```c
+static esp_bt_uuid_t xxx_uuid = {
+    .len = ESP_UUID_LEN_128,
+    .uuid = {.uuid128 = { 0 },},
+};
 ```
 
-### Install the ESP-IDF Toolchain
+3. Add the new UUID128 to the profile.
 
-The configuration instructions below assume you have already installed the
-ESP-IDF toolchain. Instructions for installing the toolchain can be found here.
-
-[Set Up The Tools](https://docs.espressif.com/projects/esp-idf/en/latest/esp32/get-started/index.html#step-3-set-up-the-tools)
-
-### Python 2 Dependencies
-
-Due to [some issues with Python versions in the ESP-IDF tooling](https://github.com/espressif/esp-idf/issues/5284#issuecomment-693426699),
-you must have the Python 2.7 dependencies installed on your machine even if
-you have configured ESP-IDF to use Python 3.
-
-On Linux, you may install `libpython2.7` with the following command.
-
-```sh
-sudo apt-get install libpython2.7
+```c
+// Copy the new UUID128 to the profile
+memcpy(xxx_uuid.uuid.uuid128, gatts_xxx_uuid128, ESP_UUID_LEN_128);
 ```
 
-## Configuration
+4. Edit the `ESP_GATTC_SEARCH_RES_EVT` in order to filter the new UUID128.
 
-To configure the tasks and debug configuration there are a few tweaks you need
-to make to the files in the **.vscode** directory as follows.
-
-### settings.json
-
-- **esp_idf_path** - The ESP IDF path is set in $IDF_PATH after running `. export.sh` (default: `~/esp/esp-idf`).
-
-  The value in `esp_idf_path` has been defaulted based on the instructions
-  provided by ESP regarding tool installation. see:
-  https://docs.espressif.com/projects/esp-idf/en/latest/esp32/get-started/index.html#step-3-set-up-the-tools
-
-### launch.json
-
-If you cloned this repository directly to start a new project this file does
-not need to be changed. Proceed to the next section.
-
-If you added this file to an existing project you need to change the **target**
-attribute to point to the `.elf` file created during a firmware build. It will
-be named based on what you call your project in the top-level `CMakeLists.txt`
-file.
-
-### tasks.json
-
-No changes need to be made to this file.
-
-## Debugging Instructions
-
-**ESP-Prog Connector Pinout Diagram:**
-
-![ESP-Prog Connector Pinout](esp32-prog.png)
-
-1. Attach the ESP-Prog to your target device via whatever JTAG cable is required.
-1. Plug the target device (the one you want to debug) into your computer.
-1. Click **Terminal > Run Tasks...** to open the Task list in VSCode and select
-_Flash and Monitor Device_.
-1. The device should successfully flash and start showing serial output, if applicable.
-1. Plug the ESP-Prog into your computer. The red LED should illuminate.
-1. Start a debug session with **F5** or **Run->Start Debugging** from the menu.
-
-### Done 🤩
-
-From this state you can makes changes and flash new firmware. Starting a new
-debug session will reset and halt your device at your application entry point.
-
-### It Stopped Working, Now What? 😞
-
-I've found this to be a very reliable approach to debugging my ESP32 device.
-However, occasionally things will stop working and it won't be clear why. The
-'ol "turn it off and back on again" is pretty effective here. To fix almost any
-issues:
-
-1. Make sure the debugger is stopped by hitting the Red square from the debug
-panel, hitting **Shift-F5** or **Run->Stop Debugging** from the menu.
-1. Stop OpenOCD by focusing the OpenOCD shell output window and hitting **Ctrl-C**.
-1. Try to start debugging again.
-
-If you get the following error when trying to flash your device:
-
-```none
-A fatal error occurred: Timed out waiting for packet content
-CMake Error at run_cmd.cmake:14 (message):
-  esptool.py failed
-Call Stack (most recent call first):
-  run_esptool.cmake:21 (include)
+```c
+case ESP_GATTC_SEARCH_RES_EVT: {
+    ESP_LOGI(GATTC_TAG, "SEARCH RES: conn_id = %x is primary service %d", p_data->search_res.conn_id, p_data->search_res.is_primary);
+    ESP_LOGI(GATTC_TAG, "start handle %d end handle %d current handle value %d", p_data->search_res.start_handle, p_data->search_res.end_handle, p_data->search_res.srvc_id.inst_id);
+    if (p_data->search_res.srvc_id.uuid.len == ESP_UUID_LEN_128) {
+        if(memcmp(p_data->search_res.srvc_id.uuid.uuid.uuid128, gatts_xxx_uuid128, ESP_UUID_LEN_128) == 0){
+            ESP_LOGI(GATTC_TAG, "service uuid128 found");
+            get_server = true;
+            gl_profile_tab[PROFILE_X_APP_ID].service_start_handle = p_data->search_res.start_handle;
+            gl_profile_tab[PROFILE_X_APP_ID].service_end_handle = p_data->search_res.end_handle;
+        } else {
+            ESP_LOGE(GATTC_TAG, "service not found");
+        }
+    }
+    break;
 ```
 
-This can be due to the IDF not correctly identifying your target device during
-the original port scan (i.e. the wrong `/dev/ttyXXX` device). Both the ESP32
-target device, as well as the ESP-Prog, will enumerate as `/dev/ttyUSB0`
-(depending on whichever was plugged in first). Since the debug commands scan for
-the target device port in ascending order, it can be helpful if you plug in the
-target device first.
+## Example Output
 
-Another thing to try is to disconnect your ESP-Prog and try to flash your device
-without the ESP-Prog connected. After successful flash, you can reconnect the
-ESP-Prog to your computer.
+```
+I (0) cpu_start: Starting scheduler on APP CPU.
+I (525) BTDM_INIT: BT controller compile version [1342a48]
+I (525) system_api: Base MAC address is not set
+I (525) system_api: read default base MAC address from EFUSE
+I (535) phy_init: phy_version 4670,719f9f6,Feb 18 2021,17:07:07
+I (945) GATTC_DEMO: REG_EVT
+I (955) GATTC_DEMO: scan start success
+I (1115) GATTC_DEMO: 08 ef 3b a7 04 41 
+I (1115) GATTC_DEMO: searched Adv Data Len 9, Scan Response Len 15
+I (1115) GATTC_DEMO: searched Device Name Len 13
+I (1125) GATTC_DEMO: LG CM2760(41)
+I (1125) GATTC_DEMO: 
 
-## **-----> A Note on Versions <-----**
+I (1425) GATTC_DEMO: 08 ef 3b a7 04 41 
+I (1425) GATTC_DEMO: searched Adv Data Len 9, Scan Response Len 15
+I (1425) GATTC_DEMO: searched Device Name Len 13
+I (1435) GATTC_DEMO: LG CM2760(41)
+I (1435) GATTC_DEMO: 
 
-The main branch of this repo is configured to work with version 5.0 of ESP-IDF.
-If you are using a different version of IDF it is very likely that paths in the
-**settings.json** file will need to be altered to match the various toolchain
-versions.
+I (1865) GATTC_DEMO: 38 68 a4 69 bb 7c 
+I (1865) GATTC_DEMO: searched Adv Data Len 31, Scan Response Len 14
+I (1865) GATTC_DEMO: searched Device Name Len 0
+I (1875) GATTC_DEMO: 
 
-## Donate a Burrito
+I (2185) GATTC_DEMO: 38 68 a4 69 bb 7c 
+I (2185) GATTC_DEMO: searched Adv Data Len 31, Scan Response Len 14
+I (2185) GATTC_DEMO: searched Device Name Len 0
+I (2185) GATTC_DEMO:
+```
 
-This information is the result of hours upon hours of research and trial and
-error and is provided free to the community to hopefully help other ESP32 makers.
-That said, if you found this helpful or if it saved you time and you wanna say
-thanks in the form of a burrito, well, I'm not gonna stop you.
+## Troubleshooting
 
-[Buy Me a Burrito](https://www.buymeacoffee.com/kevinsidwar) 🌯🌯🌯
+For any technical queries, please open an [issue](https://github.com/espressif/esp-idf/issues) on GitHub. We will get back to you soon.

@@ -44,18 +44,18 @@
 					"text": "flushregs",
 					"ignoreFailures": false
 				},
-				{
-					"description": "Set Temporary Hardware Assisted Breakpoint at `app_main`",
-					"text": "thbreak app_main",
-					"ignoreFailures": false
-				},
+				// {
+				// 	"description": "Set Temporary Hardware Assisted Breakpoint at `app_main`",
+				// 	"text": "thbreak app_main",
+				// 	"ignoreFailures": false
+				// },
 				{
 					"description": "Shutdown GDB Server on GDB Detach",
 					"text": "monitor [target current] configure -event gdb-detach { shutdown }",
 					"ignoreFailures": false
 				},
 			],
-			"stopAtConnect": false,
+			"stopAtConnect": true,
 			"logging": {
 				"exceptions": true,
 				"engineLogging": false,

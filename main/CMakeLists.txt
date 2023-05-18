@@ -2,8 +2,10 @@ set(NOTE_C ${CMAKE_CURRENT_LIST_DIR}/../note-c)
 
 idf_component_register(
     SRCS
-    "gattc_demo.c"
     "note_c_hooks.c"
+    "omron_demo.c"
+    "omron_gap_scan.c"
+    "omron_gatt_dis.c"
     "${NOTE_C}/n_atof.c"
     "${NOTE_C}/n_b64.c"
     "${NOTE_C}/n_cjson.c"

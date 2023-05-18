@@ -575,7 +575,7 @@ case ESP_GATTC_SEARCH_CMPL_EVT:
         uint16_t count = 0;
         esp_gatt_status_t status = esp_ble_gattc_get_attr_count( gattc_if,
                           p_data->search_cmpl.conn_id,ESP_GATT_DB_CHARACTERISTIC,                                                                                                                 		                    gl_profile_tab[PROFILE_A_APP_ID].service_start_handle,                                                                   		                    gl_profile_tab[PROFILE_A_APP_ID].service_end_handle,        
-                                                                INVALID_HANDLE,      	                  
+                                                                EMPTY_HANDLE,      	                  
                                                                      &count);
         if (status != ESP_GATT_OK){
             ESP_LOGE(GATTC_TAG, "esp_ble_gattc_get_attr_count error");

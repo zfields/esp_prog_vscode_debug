@@ -1,0 +1,10 @@
+#ifndef OMRON_PROFILE_ID_H
+#define OMRON_PROFILE_ID_H
+
+#define PROFILE_COUNT 1
+#define PROFILE_DIS_ID 0
+#define PROFILE_BLM_ID 2
+
+#define EMPTY_HANDLE 0
+
+#endif // OMRON_PROFILE_ID_H

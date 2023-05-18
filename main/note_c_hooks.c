@@ -103,6 +103,7 @@ bool note_i2c_reset(uint16_t device_address_) {
         ESP_LOGE("NOTE-C", "%s", esp_err_to_name(err));
     } else if ((err = i2c_driver_install(ESP32_I2C_PORT, conf.mode, ESP32_I2C_RX_BUF, ESP32_I2C_TX_BUF, ESP32_INTR_FLAGS))) {
         ESP_LOGE("NOTE-C", "%s", esp_err_to_name(err));
+    //TODO: What is happening here?
     } else if ((err = i2c_set_timeout(ESP32_I2C_PORT, 1048575))) {
         ESP_LOGE("NOTE-C", "%s", esp_err_to_name(err));
     }

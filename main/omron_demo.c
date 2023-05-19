@@ -32,7 +32,7 @@
 // Include BLE Transaction Flows
 #include "omron_gap_scan.h"
 #include "omron_gatt_dis.h"
-#include "omron_profile_id.h"
+#include "omron_defs.h"
 
 // Include Notecard note-c library
 #include <note.h>

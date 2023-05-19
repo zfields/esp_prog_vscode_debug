@@ -1,5 +1,7 @@
-#ifndef OMRON_PROFILE_ID_H
-#define OMRON_PROFILE_ID_H
+#ifndef OMRON_DEFS_H
+#define OMRON_DEFS_H
+
+#define OMRON_COMPANY_ID 0x020E
 
 #define PROFILE_COUNT 1
 #define PROFILE_DIS_ID 0
@@ -7,4 +9,4 @@
 
 #define EMPTY_HANDLE 0
 
-#endif // OMRON_PROFILE_ID_H
+#endif // OMRON_DEFS_H

@@ -11,7 +11,7 @@
 #include <note.h>
 
 #include "omron_gap_scan.h"
-#include "omron_profile_id.h"
+#include "omron_defs.h"
 
 #define LOG_TAG "GATTC_DIS"
 

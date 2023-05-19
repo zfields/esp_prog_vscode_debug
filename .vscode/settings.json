@@ -20,6 +20,7 @@
         "esp_gap_ble_api.h": "c",
         "gap_scan_flow.h": "c",
         "omron_gap_scan.h": "c",
-        "omron_gatt_blm_collector_flow.h": "c"
+        "omron_gatt_blm_collector_flow.h": "c",
+        "esp_bt_defs.h": "c"
     }
 }

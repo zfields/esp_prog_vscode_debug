@@ -1,18 +1,20 @@
 #include "omron_gap_scan.h"
 
+// Include C standard libraries
 #include <string.h>
 
+// Include ESP-IDF libraries
 #include <esp_bt_defs.h>
 #include <esp_log.h>
 
-#include "omron_gatt_dis.h"
+// Include OMRON BLE files
 #include "omron_defs.h"
+#include "omron_gatt_scan.h"
 
 #define LOG_TAG "GAP_SCAN"
 
 volatile bool connect = false;
 static const char remote_device_prefix[] = "BLEsmart_00000154";
-static esp_bd_addr_t omron_blm_device_addr = {0x00,0x5F,0xBF,0x9F,0x9C,0x11};
 
 void esp_gap_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param)
 {
@@ -21,85 +23,94 @@ void esp_gap_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param)
     {
     case ESP_GAP_BLE_SCAN_PARAM_SET_COMPLETE_EVT:
     {
+        if (ESP_BT_STATUS_SUCCESS != param->scan_param_cmpl.status)
+        {
+            ESP_LOGE(LOG_TAG, "SCAN_PARAM_SET_COMPLETE_EVT [%d]", event);
+            ESP_LOGE(LOG_TAG, "[%d]\tStatus: %d", event, param->scan_param_cmpl.status);
+            ESP_LOGE(LOG_TAG, "[%d]", event);
+            break;
+        }
+ 
         ESP_LOGI(LOG_TAG, "SCAN_PARAM_SET_COMPLETE_EVT [%d]", event);
         ESP_LOGI(LOG_TAG, "[%d]\tStatus: %d", event, param->scan_param_cmpl.status);
         ESP_LOGI(LOG_TAG, "[%d]", event);
 
-        if (param->scan_param_cmpl.status != ESP_BT_STATUS_SUCCESS)
-        {
-            ESP_LOGE(LOG_TAG, "[%d] scan param set failed, error status = %x", event, param->scan_param_cmpl.status);
-            break;
-        }
-        esp_ble_gap_update_whitelist(ESP_BLE_WHITELIST_ADD, omron_blm_device_addr, BLE_ADDR_TYPE_PUBLIC);
-        ESP_LOGI(LOG_TAG, "[%d] adding device (%02X:%02X:%02X:%02X:%02X:%02X) to whitelist...", event, omron_blm_device_addr[0], omron_blm_device_addr[1], omron_blm_device_addr[2], omron_blm_device_addr[3], omron_blm_device_addr[4], omron_blm_device_addr[5]);
+        // Report the result of the scan parameter update
+        ESP_LOGI(LOG_TAG, "[%d] scan parameters set", event);
+
+        // Add known device to the whitelist
+        esp_ble_gap_update_whitelist(ESP_BLE_WHITELIST_ADD, OMRON_DEVICE_ADDR, BLE_ADDR_TYPE_PUBLIC);
+        ESP_LOGI(LOG_TAG, "[%d] adding device (%02X:%02X:%02X:%02X:%02X:%02X) to whitelist...", event, OMRON_DEVICE_ADDR[0], OMRON_DEVICE_ADDR[1], OMRON_DEVICE_ADDR[2], OMRON_DEVICE_ADDR[3], OMRON_DEVICE_ADDR[4], OMRON_DEVICE_ADDR[5]);
         break;
     }
     case ESP_GAP_BLE_UPDATE_WHITELIST_COMPLETE_EVT:
+        if (ESP_BT_STATUS_SUCCESS != param->update_whitelist_cmpl.status)
+        {
+            ESP_LOGE(LOG_TAG, "UPDATE_WHITELIST_COMPLETE_EVT [%d]", event);
+            ESP_LOGE(LOG_TAG, "[%d]\tStatus: %d", event, param->update_whitelist_cmpl.status);
+            ESP_LOGE(LOG_TAG, "[%d]", event);
+            break;
+        }
+
         ESP_LOGI(LOG_TAG, "UPDATE_WHITELIST_COMPLETE_EVT [%d]", event);
         ESP_LOGI(LOG_TAG, "[%d]\tStatus: %d", event, param->update_whitelist_cmpl.status);
         ESP_LOGI(LOG_TAG, "[%d]\tOperation: %d", event, param->update_whitelist_cmpl.wl_operation);
         ESP_LOGI(LOG_TAG, "[%d]", event);
 
-        if (param->update_whitelist_cmpl.status != ESP_BT_STATUS_SUCCESS)
-        {
-            ESP_LOGE(LOG_TAG, "[%d] update whitelist failed, error status = %x", event, param->update_whitelist_cmpl.status);
-            break;
-        }
+        // Report the result of the whitelist update
         ESP_LOGI(LOG_TAG, "[%d] %s device to whitelist", event, (param->update_whitelist_cmpl.wl_operation == ESP_BLE_WHITELIST_ADD ? "added" : "removed"));
 
-        // the unit of the duration is second
-        uint32_t duration_s = 30;
+        // Start scanning for BLE devices
+        const uint32_t duration_s = 30;
         ESP_LOGI(LOG_TAG, "[%d] begin scanning for BLE devices for %lu seconds...", event, duration_s);
         esp_ble_gap_start_scanning(duration_s);
         break;
     case ESP_GAP_BLE_SCAN_START_COMPLETE_EVT:
+        if (ESP_BT_STATUS_SUCCESS != param->scan_start_cmpl.status) {
+            ESP_LOGE(LOG_TAG, "SCAN_START_COMPLETE_EVT [%d]", event);
+            ESP_LOGE(LOG_TAG, "[%d]\tStatus: %d", event, param->scan_start_cmpl.status);
+            ESP_LOGE(LOG_TAG, "[%d]", event);
+            break;
+        }
+
         ESP_LOGI(LOG_TAG, "SCAN_START_COMPLETE_EVT [%d]", event);
         ESP_LOGI(LOG_TAG, "[%d]\tStatus: %d", event, param->scan_start_cmpl.status);
         ESP_LOGI(LOG_TAG, "[%d]", event);
 
-        // scan start complete event to indicate scan start successfully or failed
-        if (param->scan_start_cmpl.status != ESP_BT_STATUS_SUCCESS)
-        {
-            ESP_LOGE(LOG_TAG, "[%d] scan start failed, error status: 0x%x", event, param->scan_start_cmpl.status);
-            break;
-        }
+        // Report the result of the scan start
         ESP_LOGI(LOG_TAG, "[%d] now scanning for BLE devices...", event);
-
         break;
     case ESP_GAP_BLE_SCAN_RESULT_EVT:
     {
         ESP_LOGI(LOG_TAG, "SCAN_RESULT_EVT [%d]", event);
-        ESP_LOGI(LOG_TAG, "[%d]\tSearch Event: %d", event, param->scan_rst.search_evt);
-        if (ESP_GAP_SEARCH_INQ_RES_EVT == param->scan_rst.search_evt)
-        {
-            ESP_LOGI(LOG_TAG, "[%d]\tBluetooth Device Address: %02X:%02X:%02X:%02X:%02X:%02X", event, param->scan_rst.bda[0], param->scan_rst.bda[1], param->scan_rst.bda[2], param->scan_rst.bda[3], param->scan_rst.bda[4], param->scan_rst.bda[5]);
-            ESP_LOGI(LOG_TAG, "[%d]\tBLE Device Type: %d", event, param->scan_rst.ble_addr_type);
-            ESP_LOGI(LOG_TAG, "[%d]\tBLE Address Type: %d", event, param->scan_rst.ble_addr_type);
-            ESP_LOGI(LOG_TAG, "[%d]\tBLE Scan Result Event Type: %d", event, param->scan_rst.ble_addr_type);
-            ESP_LOGI(LOG_TAG, "[%d]\tPacket RSSI: %d dbm", event, param->scan_rst.rssi);
-            ESP_LOGI(LOG_TAG, "[%d]\tAdvertising Data Flag: 0x%02X", event, param->scan_rst.flag);
-            ESP_LOGI(LOG_TAG, "[%d]\tScan Response Count: %d", event, param->scan_rst.num_resps);
-            ESP_LOGI(LOG_TAG, "[%d]\tDiscarded Packet Count: %lu", event, param->scan_rst.num_dis);
-#if CONFIG_EXAMPLE_DUMP_ADV_DATA_AND_SCAN_RESP
-            if (param->scan_rst.adv_data_len > 0)
-            {
-                ESP_LOGI(LOG_TAG, "[%d]\tRaw Advertising Data (%u):", event, param->scan_rst.adv_data_len);
-                esp_log_buffer_hex(LOG_TAG, &param->scan_rst.ble_adv[0], param->scan_rst.adv_data_len);
-            }
-            if (param->scan_rst.scan_rsp_len > 0)
-            {
-                ESP_LOGI(LOG_TAG, "[%d]\tRaw Scan Response Data (%u):", event, param->scan_rst.scan_rsp_len);
-                esp_log_buffer_hex(LOG_TAG, &param->scan_rst.ble_adv[param->scan_rst.adv_data_len], param->scan_rst.scan_rsp_len);
-            }
-#endif
-        }
         ESP_LOGI(LOG_TAG, "[%d]", event);
 
         switch (param->scan_rst.search_evt)
         {
         case ESP_GAP_SEARCH_INQ_RES_EVT:
             ESP_LOGI(LOG_TAG, "[%d] SEARCH_INQ_RES_EVT [%d]", event, param->scan_rst.search_evt);
+            ESP_LOGI(LOG_TAG, "[%d][%d]\tBluetooth Device Address: %02X:%02X:%02X:%02X:%02X:%02X", event, param->scan_rst.search_evt, param->scan_rst.bda[0], param->scan_rst.bda[1], param->scan_rst.bda[2], param->scan_rst.bda[3], param->scan_rst.bda[4], param->scan_rst.bda[5]);
+            ESP_LOGI(LOG_TAG, "[%d][%d]\tBLE Device Type: %d", event, param->scan_rst.search_evt, param->scan_rst.dev_type);
+            ESP_LOGI(LOG_TAG, "[%d][%d]\tBLE Address Type: %d", event, param->scan_rst.search_evt, param->scan_rst.ble_addr_type);
+            ESP_LOGI(LOG_TAG, "[%d][%d]\tBLE Scan Result Event Type: %d", event, param->scan_rst.search_evt, param->scan_rst.ble_evt_type);
+            ESP_LOGI(LOG_TAG, "[%d][%d]\tPacket RSSI: %d dbm", event, param->scan_rst.search_evt, param->scan_rst.rssi);
+            ESP_LOGI(LOG_TAG, "[%d][%d]\tAdvertising Data Flag: 0x%02X", event, param->scan_rst.search_evt, param->scan_rst.flag);
+            ESP_LOGI(LOG_TAG, "[%d][%d]\tScan Response Count: %d", event, param->scan_rst.search_evt, param->scan_rst.num_resps);
+            ESP_LOGI(LOG_TAG, "[%d][%d]\tDiscarded Packet Count: %lu", event, param->scan_rst.search_evt, param->scan_rst.num_dis);
+#if CONFIG_EXAMPLE_DUMP_ADV_DATA_AND_SCAN_RESP
+            if (param->scan_rst.adv_data_len > 0)
+            {
+                ESP_LOGI(LOG_TAG, "[%d][%d]\tRaw Advertising Data (%u):", event, param->scan_rst.search_evt, param->scan_rst.adv_data_len);
+                esp_log_buffer_hex(LOG_TAG, &param->scan_rst.ble_adv[0], param->scan_rst.adv_data_len);
+            }
+            if (param->scan_rst.scan_rsp_len > 0)
+            {
+                ESP_LOGI(LOG_TAG, "[%d][%d]\tRaw Scan Response Data (%u):", event, param->scan_rst.search_evt, param->scan_rst.scan_rsp_len);
+                esp_log_buffer_hex(LOG_TAG, &param->scan_rst.ble_adv[param->scan_rst.adv_data_len], param->scan_rst.scan_rsp_len);
+            }
+#endif
             ESP_LOGI(LOG_TAG, "[%d][%d]", event, param->scan_rst.search_evt);
+
             uint8_t *adv_data = NULL;
             uint8_t adv_data_len = 0;
 
@@ -200,24 +211,29 @@ void esp_gap_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param)
             }
 
             // Initiate GATT Connection
-            if (adv_data != NULL)
-            {
-                if ((char *)adv_data == strstr((char *)adv_data, remote_device_prefix))
-                {
-                    if (connect == false)
-                    {
-                        connect = true;
-                        ESP_LOGI(LOG_TAG, "[%d][%d] stopping scan...", event, param->scan_rst.search_evt);
-                        esp_ble_gap_stop_scanning();
-                        ESP_LOGI(LOG_TAG, "[%d][%d] connecting to remote device %s...", event, param->scan_rst.search_evt, (char *)adv_data);
-                        esp_ble_gattc_open(gl_profile_tab[PROFILE_DIS_ID].gattc_if, param->scan_rst.bda, param->scan_rst.ble_addr_type, true);
-                    }
+            if ((adv_data != NULL) && ((char *)adv_data == strstr((char *)adv_data, remote_device_prefix))) {
+                ESP_LOGI(LOG_TAG, "[%d][%d] discovered a device matching \"%s\"", event, param->scan_rst.search_evt, remote_device_prefix);
+
+                if (connect) {
+                    ESP_LOGI(LOG_TAG, "[%d][%d] already connecting to a remote device...", event, param->scan_rst.search_evt);
+                } else {
+                    connect = true;
+
+                    // Stop Scan
+                    ESP_LOGI(LOG_TAG, "[%d][%d] stopping scan...", event, param->scan_rst.search_evt);
+                    esp_ble_gap_stop_scanning();
+
+                    // Connect to Device
+                    ESP_LOGI(LOG_TAG, "[%d][%d] establishing direct connection to remote device %02X:%02X:%02X:%02X:%02X:%02X...", event, param->scan_rst.search_evt, param->scan_rst.bda[0], param->scan_rst.bda[1], param->scan_rst.bda[2], param->scan_rst.bda[3], param->scan_rst.bda[4], param->scan_rst.bda[5]);
+                    esp_ble_gattc_open(gl_profile_tab[PROFILE_DIS_ID].gattc_if, param->scan_rst.bda, param->scan_rst.ble_addr_type, true);
                 }
             }
             break;
         case ESP_GAP_SEARCH_INQ_CMPL_EVT:
             ESP_LOGI(LOG_TAG, "[%d] SEARCH_INQ_CMPL_EVT [%d]", event, param->scan_rst.search_evt);
             ESP_LOGI(LOG_TAG, "[%d][%d]", event, param->scan_rst.search_evt);
+
+            // Report Scan Status
             ESP_LOGI(LOG_TAG, "[%d][%d] scan stopped (expired)", event, param->scan_rst.search_evt);
             break;
         default:
@@ -229,28 +245,34 @@ void esp_gap_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param)
     }
 
     case ESP_GAP_BLE_SCAN_STOP_COMPLETE_EVT:
+        if (ESP_BT_STATUS_SUCCESS != param->scan_stop_cmpl.status) {
+            ESP_LOGE(LOG_TAG, "SCAN_STOP_COMPLETE_EVT [%d]", event);
+            ESP_LOGE(LOG_TAG, "[%d]\tStatus: %d", event, param->scan_stop_cmpl.status);
+            ESP_LOGE(LOG_TAG, "[%d]", event);
+            break;
+        }
+
         ESP_LOGI(LOG_TAG, "SCAN_STOP_COMPLETE_EVT [%d]", event);
         ESP_LOGI(LOG_TAG, "[%d]\tStatus: %d", event, param->scan_stop_cmpl.status);
         ESP_LOGI(LOG_TAG, "[%d]", event);
 
-        if (param->scan_stop_cmpl.status != ESP_BT_STATUS_SUCCESS)
-        {
-            ESP_LOGE(LOG_TAG, "[%d] scan stop failed, error status = 0x%x", event, param->scan_stop_cmpl.status);
-            break;
-        }
+        // Report Scan Status
         ESP_LOGI(LOG_TAG, "[%d] scan stopped", event);
         break;
 
     case ESP_GAP_BLE_ADV_STOP_COMPLETE_EVT:
+        if (ESP_BT_STATUS_SUCCESS != param->adv_stop_cmpl.status) {
+            ESP_LOGE(LOG_TAG, "ADV_STOP_COMPLETE_EVT [%d]", event);
+            ESP_LOGE(LOG_TAG, "[%d]\tStatus: %d", event, param->adv_stop_cmpl.status);
+            ESP_LOGE(LOG_TAG, "[%d]", event);
+            break;
+        }
+
         ESP_LOGI(LOG_TAG, "ADV_STOP_COMPLETE_EVT [%d]", event);
         ESP_LOGI(LOG_TAG, "[%d]\tStatus: %d", event, param->adv_stop_cmpl.status);
         ESP_LOGI(LOG_TAG, "[%d]", event);
 
-        if (param->adv_stop_cmpl.status != ESP_BT_STATUS_SUCCESS)
-        {
-            ESP_LOGE(LOG_TAG, "[%d] adv stop failed, error status = 0x%x", event, param->adv_stop_cmpl.status);
-            break;
-        }
+        // Report the result of the advertising stop command
         ESP_LOGI(LOG_TAG, "[%d] stop adv successfully", event);
         break;
     default:

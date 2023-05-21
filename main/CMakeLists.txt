@@ -5,7 +5,7 @@ idf_component_register(
     "note_c_hooks.c"
     "omron_demo.c"
     "omron_gap_scan.c"
-    "omron_gatt_dis.c"
+    "omron_gatt_scan.c"
     "${NOTE_C}/n_atof.c"
     "${NOTE_C}/n_b64.c"
     "${NOTE_C}/n_cjson.c"

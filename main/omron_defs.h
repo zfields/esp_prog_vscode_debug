@@ -2,11 +2,13 @@
 #define OMRON_DEFS_H
 
 #define OMRON_COMPANY_ID 0x020E
+#define OMRON_DEVICE_ADDR (esp_bd_addr_t){0x00,0x5F,0xBF,0x9F,0x9C,0x11}
 
 #define PROFILE_COUNT 1
 #define PROFILE_DIS_ID 0
 #define PROFILE_BLM_ID 2
 
-#define EMPTY_HANDLE 0
+#define IGNORED_PARAMETER 0
+#define OFFSET_ZERO 0
 
 #endif // OMRON_DEFS_H

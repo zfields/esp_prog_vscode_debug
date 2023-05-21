@@ -13,32 +13,34 @@
  *
  ****************************************************************************/
 
+// Include C standard libraries
 #include <stdint.h>
 #include <string.h>
 #include <stdbool.h>
 #include <stdio.h>
-#include "nvs.h"
-#include "nvs_flash.h"
 
-#include "esp_bt.h"
-#include "esp_gap_ble_api.h"
-#include "esp_gattc_api.h"
-#include "esp_gatt_defs.h"
-#include "esp_bt_main.h"
-#include "esp_gatt_common_api.h"
-#include "esp_log.h"
-#include "freertos/FreeRTOS.h"
-
-// Include BLE Transaction Flows
-#include "omron_gap_scan.h"
-#include "omron_gatt_dis.h"
-#include "omron_defs.h"
+// Include ESP-IDF libraries
+#include <esp_bt.h>
+#include <esp_bt_main.h>
+#include <esp_gap_ble_api.h>
+#include <esp_gatt_common_api.h>
+#include <esp_gatt_defs.h>
+#include <esp_gattc_api.h>
+#include <esp_log.h>
+#include <freertos/FreeRTOS.h>
+#include <nvs.h>
+#include <nvs_flash.h>
 
 // Include Notecard note-c library
 #include <note.h>
 
 // Notecard node-c helper methods
 #include "note_c_hooks.h"
+
+// Include OMRON BLE files
+#include "omron_defs.h"
+#include "omron_gap_scan.h"
+#include "omron_gatt_scan.h"
 
 // Uncomment the define below and replace com.your-company:your-product-name
 // with your ProductUID.
@@ -50,6 +52,8 @@
 #endif
 
 #define LOG_TAG "OMRON_DEMO"
+
+#define NOTECARD_REQUEST_TIMEOUT_S 5
 
 static esp_ble_scan_params_t ble_scan_params = {
     .scan_type = BLE_SCAN_TYPE_ACTIVE,
@@ -110,13 +114,13 @@ static esp_err_t initBluetoothHost(void)
 void app_main(void)
 {
     // Initialize NVS.
-    esp_err_t ret = nvs_flash_init();
-    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND)
+    esp_err_t err = nvs_flash_init();
+    if (err == ESP_ERR_NVS_NO_FREE_PAGES || err == ESP_ERR_NVS_NEW_VERSION_FOUND)
     {
         ESP_ERROR_CHECK(nvs_flash_erase());
-        ret = nvs_flash_init();
+        err = nvs_flash_init();
     }
-    ESP_ERROR_CHECK(ret);
+    ESP_ERROR_CHECK(err);
 
     // Initialize note-c hooks
     NoteSetUserAgent((char *)"note-esp32");
@@ -131,7 +135,7 @@ void app_main(void)
         JAddStringToObject(req, "product", PRODUCT_UID);
         JAddStringToObject(req, "mode", "continuous");
         JAddStringToObject(req, "sn", "omron-relay");
-        if (!NoteRequest(req))
+        if (!NoteRequestWithRetry(req, NOTECARD_REQUEST_TIMEOUT_S))
         {
             NoteDebug("Failed to configure Notecard.");
             return;
@@ -144,46 +148,47 @@ void app_main(void)
     }
 
     // Initialize the Bluetooth Controller
-    ret = initBluetoothController();
-    ESP_ERROR_CHECK(ret);
+    err = initBluetoothController();
+    ESP_ERROR_CHECK(err);
 
     // Initialize the Bluetooth Host
-    ret = initBluetoothHost();
-    ESP_ERROR_CHECK(ret);
+    err = initBluetoothHost();
+    ESP_ERROR_CHECK(err);
 
     // Register the callback function to the gap module
-    ret = esp_ble_gap_register_callback(esp_gap_cb);
-    if (ret)
+    err = esp_ble_gap_register_callback(esp_gap_cb);
+    if (err)
     {
-        ESP_LOGE(LOG_TAG, "%s gap register failed, error code = 0x%x\n", __func__, ret);
+        ESP_LOGE(LOG_TAG, "%s gap register failed, error code = 0x%x\n", __func__, err);
         return;
     }
 
     // Register the callback function to the gattc module
-    ret = esp_ble_gattc_register_callback(esp_gattc_cb);
-    if (ret)
+    err = esp_ble_gattc_register_callback(esp_gattc_intercept_cb);
+    if (err)
     {
-        ESP_LOGE(LOG_TAG, "%s gattc register failed, error code = 0x%x\n", __func__, ret);
+        ESP_LOGE(LOG_TAG, "%s gattc register failed, error code = 0x%x\n", __func__, err);
         return;
     }
 
-    ret = esp_ble_gattc_app_register(PROFILE_DIS_ID);
-    if (ret)
+    err = esp_ble_gattc_app_register(PROFILE_DIS_ID);
+    if (err)
     {
-        ESP_LOGE(LOG_TAG, "%s gattc app register failed, error code = 0x%x\n", __func__, ret);
+        ESP_LOGE(LOG_TAG, "%s gattc app register failed, error code = 0x%x\n", __func__, err);
     }
 
     // Setting GAP parameters will begin scanning for BLE devices
-    esp_err_t scan_ret = esp_ble_gap_set_scan_params(&ble_scan_params);
-    if (scan_ret)
+    err = esp_ble_gap_set_scan_params(&ble_scan_params);
+    if (err)
     {
-        ESP_LOGE(LOG_TAG, "set scan params error, error code = 0x%x", scan_ret);
+        ESP_LOGE(LOG_TAG, "set scan params error, error code = 0x%x", err);
     }
 
     // Establish the Maximum Transmission Unit (MTU) size
-    esp_err_t local_mtu_ret = esp_ble_gatt_set_local_mtu(REMOTE_BLE_4_0_MTU_SIZE);
-    if (local_mtu_ret)
+    //TODO: Call before establishing a connection
+    err = esp_ble_gatt_set_local_mtu(REMOTE_BLE_4_0_MTU_SIZE);
+    if (err)
     {
-        ESP_LOGE(LOG_TAG, "set local MTU failed, error code = 0x%x", local_mtu_ret);
+        ESP_LOGE(LOG_TAG, "set local MTU failed, error code = 0x%x", err);
     }
 }

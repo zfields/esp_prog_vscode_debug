@@ -1,7 +1,8 @@
 #ifndef OMRON_GAP_SCAN_H
 #define OMRON_GAP_SCAN_H
 
-#include "esp_gap_ble_api.h"
+// Include ESP-IDF libraries
+#include <esp_gap_ble_api.h>
 
 #define REMOTE_BLE_4_0_MTU_SIZE 23
 

@@ -5,6 +5,7 @@
 
 // Include ESP-IDF libraries
 #include <esp_gap_ble_api.h>
+#include <esp_gatt_common_api.h>
 #include <esp_log.h>
 
 // Include Notecard note-c library
@@ -28,7 +29,7 @@ typedef struct {
 } characteristic_t;
 
 struct gattc_profile_inst gl_profile_tab[PROFILE_COUNT] = {
-    [PROFILE_DIS_ID] = {
+    [PROFILE_OMRON_ID] = {
         .gattc_cb = esp_gattc_common_cb,
         .gattc_if = ESP_GATT_IF_NONE /* Not get the gatt_if, so initial is ESP_GATT_IF_NONE */
     }
@@ -68,6 +69,15 @@ void esp_gattc_common_cb(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if, esp
 
         // Report that the application is now registered
         ESP_LOGI(LOG_TAG, "[%u][%d] application 0x%04x, now registered", gattc_if, event, param->reg.app_id);
+
+        // Establish the Maximum Transmission Unit (MTU) size
+        ESP_LOGI(LOG_TAG, "[%u][%d] configuring local MTU size: %u", gattc_if, event, REMOTE_BLE_4_0_MTU_SIZE);
+        esp_err_t err = esp_ble_gatt_set_local_mtu(REMOTE_BLE_4_0_MTU_SIZE);
+        if (err)
+        {
+            ESP_LOGE(LOG_TAG, "config local MTU failed, error code = 0x%x", err);
+        }
+
         break;
     }
     case ESP_GATTC_CONNECT_EVT:
@@ -82,11 +92,10 @@ void esp_gattc_common_cb(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if, esp
         ESP_LOGI(LOG_TAG, "[%u][%d]", gattc_if, event);
 
         // Copy the connection information to the profile table
-        gl_profile_tab[PROFILE_DIS_ID].conn_id = param->connect.conn_id;
-        memcpy(gl_profile_tab[PROFILE_DIS_ID].remote_bda, param->connect.remote_bda, sizeof(esp_bd_addr_t));
+        gl_profile_tab[PROFILE_OMRON_ID].conn_id = param->connect.conn_id;
+        memcpy(gl_profile_tab[PROFILE_OMRON_ID].remote_bda, param->connect.remote_bda, sizeof(esp_bd_addr_t));
 
         // Configure the MTU size
-        //TODO: Must be done before calling esp_ble_gatt_set_local_mtu
         ESP_LOGI(LOG_TAG, "[%u][%d] configuring the MTU size for connection %u on interface %u...", gattc_if, event, param->connect.conn_id, gattc_if);
         esp_err_t err = esp_ble_gattc_send_mtu_req(gattc_if, param->connect.conn_id);
         if (err)
@@ -196,8 +205,8 @@ void esp_gattc_common_cb(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if, esp
         };
 
         // Copy the service information to the global profile table
-        gl_profile_tab[PROFILE_DIS_ID].service_start_handle = param->search_res.start_handle;
-        gl_profile_tab[PROFILE_DIS_ID].service_end_handle = param->search_res.end_handle;
+        gl_profile_tab[PROFILE_OMRON_ID].service_start_handle = param->search_res.start_handle;
+        gl_profile_tab[PROFILE_OMRON_ID].service_end_handle = param->search_res.end_handle;
 
         break;
     }
@@ -215,6 +224,15 @@ void esp_gattc_common_cb(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if, esp
         ESP_LOGI(LOG_TAG, "[%u][%d]\tConnection ID: %u", gattc_if, event, param->search_cmpl.conn_id);
         ESP_LOGI(LOG_TAG, "[%u][%d]\tSearched Service Source: %u", gattc_if, event, param->search_cmpl.searched_service_source);
         ESP_LOGI(LOG_TAG, "[%u][%d]", gattc_if, event);
+
+        // Shuffle Nodes
+        esp_gattc_service_elem_node_t * n1810 = service_elem_list;
+        esp_gattc_service_elem_node_t * n1805 = service_elem_list->next;
+        esp_gattc_service_elem_node_t * n180F = service_elem_list->next->next;
+        service_elem_list = n1805;
+        n1805->next = n180F;
+        n180F->next = n1810;
+        n1810->next = NULL;
 
         // Iterate through the service element list
         for (esp_gattc_service_elem_node_t * n = service_elem_list ; n ; n = n->next) {
@@ -358,6 +376,33 @@ void esp_gattc_common_cb(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if, esp
                             };
                             ESP_LOGI(LOG_TAG, "[%u][%d][%u][%u]", gattc_if, event, char_elem_result[i].char_handle, descr_elem_result[j].handle);
 
+                            // Write to the Characterist Client Config descriptor
+                            if (ESP_UUID_LEN_16 == descr_elem_result[j].uuid.len && ESP_GATT_UUID_CHAR_CLIENT_CONFIG == descr_elem_result[j].uuid.uuid.uuid16)
+                            {
+                                uint16_t cccd;
+                                if (ESP_GATT_CHAR_PROP_BIT_INDICATE & char_elem_result[i].properties) {
+                                    cccd = CCCD_INDICATION_ENABLED;
+                                } else if (ESP_GATT_CHAR_PROP_BIT_NOTIFY & char_elem_result[i].properties) {
+                                    cccd = CCCD_NOTIFICATION_ENABLED;
+                                } else {
+                                    ESP_LOGW(LOG_TAG, "[%u][%d] characteristic does not have NOTIFY or INDICATE property", gattc_if, event);
+                                    break;
+                                }
+
+                                ESP_LOGI(LOG_TAG, "[%u][%d] enable the indication on the CCCD descriptor %d...", gattc_if, event, descr_elem_result[j].handle);
+                                status = esp_ble_gattc_write_char_descr(gattc_if,
+                                                                        gl_profile_tab[PROFILE_OMRON_ID].conn_id,
+                                                                        descr_elem_result[j].handle,
+                                                                        sizeof(cccd),
+                                                                        (uint8_t *)&cccd,
+                                                                        ESP_GATT_WRITE_TYPE_RSP,
+                                                                        ESP_GATT_AUTH_REQ_NONE);
+                                if (ESP_GATT_OK != status) {
+                                    ESP_LOGE(LOG_TAG, "[%u][%d] failed to enable the notification, error code = 0x%x", gattc_if, event, status);
+                                    break;
+                                }
+                            }
+
                             ESP_LOGI(LOG_TAG, "[%u][%d][%u][%u] reading descriptor %d on connection %u on interface %u...", gattc_if, event, char_elem_result[i].char_handle, descr_elem_result[j].handle, descr_elem_result[j].handle, param->search_cmpl.conn_id, gattc_if);
                             esp_err_t err = esp_ble_gattc_read_char_descr(gattc_if, param->search_cmpl.conn_id, descr_elem_result[j].handle, ESP_GATT_AUTH_REQ_NONE);
                             if (ESP_OK != err)
@@ -396,15 +441,21 @@ void esp_gattc_common_cb(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if, esp
                     }
                     if (ESP_GATT_CHAR_PROP_BIT_NOTIFY & char_elem_result[i].properties)
                     {
-                        ESP_LOGI(LOG_TAG, "[%u][%d][%u] registering for notification from characteristic %d on interface %u of device %02X:%02X:%02X:%02X:%02X:%02X...", gattc_if, event, char_elem_result[i].char_handle, char_elem_result[i].char_handle, gattc_if, gl_profile_tab[PROFILE_DIS_ID].remote_bda[0], gl_profile_tab[PROFILE_DIS_ID].remote_bda[1], gl_profile_tab[PROFILE_DIS_ID].remote_bda[2], gl_profile_tab[PROFILE_DIS_ID].remote_bda[3], gl_profile_tab[PROFILE_DIS_ID].remote_bda[4], gl_profile_tab[PROFILE_DIS_ID].remote_bda[5]);
-                        esp_err_t err = esp_ble_gattc_register_for_notify(gattc_if, gl_profile_tab[PROFILE_DIS_ID].remote_bda, char_elem_result[i].char_handle);
+                        ESP_LOGI(LOG_TAG, "[%u][%d][%u] registering for notification from characteristic %d on interface %u of device %02X:%02X:%02X:%02X:%02X:%02X...", gattc_if, event, char_elem_result[i].char_handle, char_elem_result[i].char_handle, gattc_if, gl_profile_tab[PROFILE_OMRON_ID].remote_bda[0], gl_profile_tab[PROFILE_OMRON_ID].remote_bda[1], gl_profile_tab[PROFILE_OMRON_ID].remote_bda[2], gl_profile_tab[PROFILE_OMRON_ID].remote_bda[3], gl_profile_tab[PROFILE_OMRON_ID].remote_bda[4], gl_profile_tab[PROFILE_OMRON_ID].remote_bda[5]);
+                        esp_err_t err = esp_ble_gattc_register_for_notify(gattc_if, gl_profile_tab[PROFILE_OMRON_ID].remote_bda, char_elem_result[i].char_handle);
                         if (ESP_OK != err)
                         {
                             ESP_LOGE(LOG_TAG, "[%u][%d][%u] failed to register for notification, error code = 0x%x", gattc_if, event, char_elem_result[i].char_handle, err);
                         }
                     }
                     if (ESP_GATT_CHAR_PROP_BIT_INDICATE & char_elem_result[i].properties) {
-                        ESP_LOGW(LOG_TAG, "[%u][%d][%u] characteristic has property INDICATE, but logic not implemented", gattc_if, event, char_elem_result[i].char_handle);
+                        // ESP_LOGW(LOG_TAG, "[%u][%d][%u] characteristic has property INDICATE, but logic not implemented", gattc_if, event, char_elem_result[i].char_handle);
+                        ESP_LOGI(LOG_TAG, "[%u][%d][%u] register for indications from characteristic %d on interface %u of device %02X:%02X:%02X:%02X:%02X:%02X...", gattc_if, event, char_elem_result[i].char_handle, char_elem_result[i].char_handle, gattc_if, gl_profile_tab[PROFILE_OMRON_ID].remote_bda[0], gl_profile_tab[PROFILE_OMRON_ID].remote_bda[1], gl_profile_tab[PROFILE_OMRON_ID].remote_bda[2], gl_profile_tab[PROFILE_OMRON_ID].remote_bda[3], gl_profile_tab[PROFILE_OMRON_ID].remote_bda[4], gl_profile_tab[PROFILE_OMRON_ID].remote_bda[5]);
+                        esp_err_t err = esp_ble_gattc_register_for_notify(gattc_if, gl_profile_tab[PROFILE_OMRON_ID].remote_bda, char_elem_result[i].char_handle);
+                        if (ESP_OK != err)
+                        {
+                            ESP_LOGE(LOG_TAG, "[%u][%d][%u] failed to register for indications, error code = 0x%x", gattc_if, event, char_elem_result[i].char_handle, err);
+                        }
                     }
                     if (ESP_GATT_CHAR_PROP_BIT_AUTH & char_elem_result[i].properties) {
                         ESP_LOGW(LOG_TAG, "[%u][%d][%u] characteristic has property AUTH, but logic not implemented", gattc_if, event, char_elem_result[i].char_handle);
@@ -497,7 +548,7 @@ void esp_gattc_common_cb(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if, esp
         //         if (body) {
         //             char uuid16_buffer[8];
         //             char note_buffer[32];
-        //             snprintf(note_buffer, sizeof(note_buffer), "%02X:%02X:%02X:%02X:%02X:%02X", gl_profile_tab[PROFILE_DIS_ID].remote_bda[0], gl_profile_tab[PROFILE_DIS_ID].remote_bda[1], gl_profile_tab[PROFILE_DIS_ID].remote_bda[2], gl_profile_tab[PROFILE_DIS_ID].remote_bda[3], gl_profile_tab[PROFILE_DIS_ID].remote_bda[4], gl_profile_tab[PROFILE_DIS_ID].remote_bda[5]);
+        //             snprintf(note_buffer, sizeof(note_buffer), "%02X:%02X:%02X:%02X:%02X:%02X", gl_profile_tab[PROFILE_OMRON_ID].remote_bda[0], gl_profile_tab[PROFILE_OMRON_ID].remote_bda[1], gl_profile_tab[PROFILE_OMRON_ID].remote_bda[2], gl_profile_tab[PROFILE_OMRON_ID].remote_bda[3], gl_profile_tab[PROFILE_OMRON_ID].remote_bda[4], gl_profile_tab[PROFILE_OMRON_ID].remote_bda[5]);
         //             JAddStringToObject(body, "Bluetooth Device Address", note_buffer);
         //             ESP_LOGI(LOG_TAG, "[%u][%d] NoteAdd: Bluetooth Device Address: %s", gattc_if, event, note_buffer);
         //             snprintf(uuid16_buffer, sizeof(uuid16_buffer), "0x%04X", ESP_GATT_UUID_DEVICE_INFO_SVC);
@@ -553,82 +604,42 @@ void esp_gattc_common_cb(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if, esp
 
         ESP_LOGI(LOG_TAG, "[%u] REG_FOR_NOTIFY_EVT [%d]", gattc_if, event);
         ESP_LOGI(LOG_TAG, "[%u][%d]\tStatus: %d", gattc_if, event, param->reg_for_notify.status);
-        ESP_LOGI(LOG_TAG, "[%u][%d]\tHandle: %d", gattc_if, event, param->reg_for_notify.handle);
+        ESP_LOGI(LOG_TAG, "[%u][%d]\tCharacteristic Handle: %d", gattc_if, event, param->reg_for_notify.handle);
         ESP_LOGI(LOG_TAG, "[%u][%d]", gattc_if, event);
 
-        uint16_t descr_count = 0;
-        uint16_t notify_en = 1;
-        ESP_LOGI(LOG_TAG, "[%u][%d] getting descriptor count of characteristic...", gattc_if, event);
-        esp_gatt_status_t status = esp_ble_gattc_get_attr_count(gattc_if,
-                                                                gl_profile_tab[PROFILE_DIS_ID].conn_id,
-                                                                ESP_GATT_DB_DESCRIPTOR,
-                                                                IGNORED_PARAMETER,
-                                                                IGNORED_PARAMETER,
-                                                                param->reg_for_notify.handle,
-                                                                &descr_count);
+        // Fetch the descriptor
+        esp_gatt_status_t status;
+        esp_gattc_descr_elem_t descr_elem_result;
+        uint16_t descr_count = 1;
+        ESP_LOGI(LOG_TAG, "[%u][%d] fetching descriptor...", gattc_if, event);
+        status = esp_ble_gattc_get_descr_by_char_handle(gattc_if,
+                                                        gl_profile_tab[PROFILE_OMRON_ID].conn_id,
+                                                        param->reg_for_notify.handle,
+                                                        notify_descr_uuid,
+                                                        &descr_elem_result,
+                                                        &descr_count);
         if (ESP_GATT_OK != status) {
-            ESP_LOGE(LOG_TAG, "[%u][%d] failed to get descriptor count, error code = 0x%x", gattc_if, event, status);
+            ESP_LOGE(LOG_TAG, "[%u][%d] failed to fetch the descriptor, error code = 0x%x", gattc_if, event, status);
             break;
         }
 
-        if (descr_count > 0) {
-            ESP_LOGI(LOG_TAG, "[%u][%d] descriptor count: %u", gattc_if, event, descr_count);
+        // Write to the descriptor
+        // if (ESP_UUID_LEN_16 == descr_elem_result.uuid.len && ESP_GATT_UUID_CHAR_CLIENT_CONFIG == descr_elem_result.uuid.uuid.uuid16)
+        // {
+        //     ESP_LOGI(LOG_TAG, "[%u][%d] enable the notification on descriptor %d...", gattc_if, event, descr_elem_result.handle);
+        //     status = esp_ble_gattc_write_char_descr(gattc_if,
+        //                                             gl_profile_tab[PROFILE_OMRON_ID].conn_id,
+        //                                             descr_elem_result.handle,
+        //                                             sizeof(CCCD_INDICATION_ENABLED),
+        //                                             (uint8_t *)&CCCD_INDICATION_ENABLED,
+        //                                             ESP_GATT_WRITE_TYPE_RSP,
+        //                                             ESP_GATT_AUTH_REQ_NONE);
+        //     if (ESP_GATT_OK != status) {
+        //         ESP_LOGE(LOG_TAG, "[%u][%d] failed to enable the notification, error code = 0x%x", gattc_if, event, status);
+        //         break;
+        //     }
+        // }
 
-            // Allocate memory for the descriptor element array
-            ESP_LOGI(LOG_TAG, "[%u][%d] allocating descriptor array...", gattc_if, event);
-            //TODO: Switch to variable and provide count of 1 below
-            descr_elem_result = (esp_gattc_descr_elem_t *)malloc(sizeof(esp_gattc_descr_elem_t) * descr_count);
-            if (!descr_elem_result) {
-                ESP_LOGE(LOG_TAG, "[%u][%d] unable to allocate descriptor array", gattc_if, event);
-                break;
-            }
-            ESP_LOGI(LOG_TAG, "[%u][%d] allocated descriptor array for %u items", gattc_if, event, descr_count);
-
-            // Populate the descriptor element array
-            ESP_LOGI(LOG_TAG, "[%u][%d] populating descriptor array...", gattc_if, event);
-            status = esp_ble_gattc_get_descr_by_char_handle(gattc_if,
-                                                            gl_profile_tab[PROFILE_DIS_ID].conn_id,
-                                                            param->reg_for_notify.handle,
-                                                            notify_descr_uuid,
-                                                            descr_elem_result,
-                                                            &descr_count);
-            if (ESP_GATT_OK != status) {
-                ESP_LOGE(LOG_TAG, "[%u][%d] failed to populate descriptor array, error code = 0x%x", gattc_if, event, status);
-                free(descr_elem_result);
-                descr_elem_result = NULL;
-                ESP_LOGI(LOG_TAG, "[%u][%d] freed descriptor array", gattc_if, event);
-                break;
-            }
-
-            // Write to the descriptor
-            if (descr_count == 1 && descr_elem_result[0].uuid.len == ESP_UUID_LEN_16 && descr_elem_result[0].uuid.uuid.uuid16 == ESP_GATT_UUID_CHAR_CLIENT_CONFIG)
-            {
-                ESP_LOGI(LOG_TAG, "[%u][%d] enable the notification on descriptor %d...", gattc_if, event, descr_elem_result[0].handle);
-                status = esp_ble_gattc_write_char_descr(gattc_if,
-                                                        gl_profile_tab[PROFILE_DIS_ID].conn_id,
-                                                        descr_elem_result[0].handle,
-                                                        sizeof(notify_en),
-                                                        (uint8_t *)&notify_en,
-                                                        ESP_GATT_WRITE_TYPE_RSP,
-                                                        ESP_GATT_AUTH_REQ_NONE);
-                if (ESP_GATT_OK != status) {
-                    ESP_LOGE(LOG_TAG, "[%u][%d] failed to enable the notification, error code = 0x%x", gattc_if, event, status);
-                    free(descr_elem_result);
-                    descr_elem_result = NULL;
-                    ESP_LOGI(LOG_TAG, "[%u][%d] freed descriptor array", gattc_if, event);
-                    break;
-                }
-            }
-
-            // Free the descriptor element array
-            free(descr_elem_result);
-            descr_elem_result = NULL;
-            ESP_LOGI(LOG_TAG, "[%u][%d] freed descriptor array", gattc_if, event);
-        }
-        else
-        {
-            ESP_LOGE(LOG_TAG, "[%u][%d] decsr not found", gattc_if, event);
-        }
         break;
     }
     case ESP_GATTC_NOTIFY_EVT:
@@ -644,11 +655,12 @@ void esp_gattc_common_cb(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if, esp
 
         if (param->notify.is_notify)
         {
-            ESP_LOGI(LOG_TAG, "[%u][%d] ESP_GATTC_NOTIFY_EVT, receive notify value:", gattc_if, event);
+            ESP_LOGI(LOG_TAG, "[%u][%d] ESP_GATTC_NOTIFY_EVT, received NOTIFY value:", gattc_if, event);
         }
         else
         {
-            ESP_LOGI(LOG_TAG, "[%u][%d] ESP_GATTC_NOTIFY_EVT, receive indicate value:", gattc_if, event);
+            ESP_LOGI(LOG_TAG, "[%u][%d] ESP_GATTC_NOTIFY_EVT, received INDICATE value:", gattc_if, event);
+            // esp_ble_gattc_send_response(gattc_if, param->notify.conn_id, param->notify.handle, ESP_GATT_OK, NULL);
         }
         break;
     }
@@ -683,7 +695,7 @@ void esp_gattc_common_cb(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if, esp
         //     write_char_data[i] = i % 256;
         // }
         // esp_ble_gattc_write_char(gattc_if,
-        //                          gl_profile_tab[PROFILE_DIS_ID].conn_id,
+        //                          gl_profile_tab[PROFILE_OMRON_ID].conn_id,
         //                          param->write.handle,
         //                          sizeof(write_char_data),
         //                          write_char_data,
@@ -760,6 +772,7 @@ void esp_gattc_common_cb(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if, esp
 
 void esp_gattc_intercept_cb(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if, esp_ble_gattc_cb_param_t *param)
 {
+    bool swallow_event = false;
     /* If event is register event, store the gattc_if for each profile */
     switch (event)
     {
@@ -784,19 +797,39 @@ void esp_gattc_intercept_cb(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if, 
     {
         ESP_LOGI(LOG_TAG, "[INTERCEPT] intercepted SEARCH_RES_EVT [%u] on interface %u", event, gattc_if);
 
-        // Search list for service node with matching UUID
-        bool found_service = false;
-        for (esp_gattc_service_elem_node_t * n = service_elem_list ; n ; n = n->next) {
-            if (n->element.uuid.len == param->search_res.srvc_id.uuid.len
-             && memcmp(&n->element.uuid.uuid, &param->search_res.srvc_id.uuid.uuid, n->element.uuid.len) == 0) {
-                found_service = true;
-                ESP_LOGW(LOG_TAG, "[INTERCEPT] found service in list");
-                break;
+        // Search list for valid service id or existing node with matching UUID
+        bool store_service = false;
+        if ((ESP_UUID_LEN_16 == param->search_res.srvc_id.uuid.len && ESP_GATT_UUID_BLOOD_PRESSURE_SVC == param->search_res.srvc_id.uuid.uuid.uuid16)
+         || (ESP_UUID_LEN_16 == param->search_res.srvc_id.uuid.len && ESP_GATT_UUID_BATTERY_SERVICE_SVC == param->search_res.srvc_id.uuid.uuid.uuid16)
+         || (ESP_UUID_LEN_16 == param->search_res.srvc_id.uuid.len && ESP_GATT_UUID_CURRENT_TIME_SVC == param->search_res.srvc_id.uuid.uuid.uuid16)
+        ) {
+            store_service = true;
+            for (esp_gattc_service_elem_node_t * n = service_elem_list ; n ; n = n->next) {
+                if (n->element.uuid.len == param->search_res.srvc_id.uuid.len
+                && memcmp(&n->element.uuid.uuid, &param->search_res.srvc_id.uuid.uuid, n->element.uuid.len) == 0) {
+                    store_service = false;
+                    ESP_LOGW(LOG_TAG, "[INTERCEPT] found service in list");
+                    break;
+                }
             }
+        } else {
+            switch (param->search_res.srvc_id.uuid.len)
+            {
+            case ESP_UUID_LEN_16:
+                ESP_LOGI(LOG_TAG, "[INTERCEPT] ignored service with UUID 0x%04X", param->search_res.srvc_id.uuid.uuid.uuid16);
+                break;
+            case ESP_UUID_LEN_32:
+                ESP_LOGI(LOG_TAG, "[INTERCEPT] ignored service with UUID 0x%08lX", param->search_res.srvc_id.uuid.uuid.uuid32);
+                break;
+            case ESP_UUID_LEN_128:
+                ESP_LOGI(LOG_TAG, "[INTERCEPT] ignored service with UUID %08lX-%04X-%04X-%04X-%012llX", *(uint32_t *)&param->search_res.srvc_id.uuid.uuid.uuid128[12], *(uint16_t *)&param->search_res.srvc_id.uuid.uuid.uuid128[10], *(uint16_t *)&param->search_res.srvc_id.uuid.uuid.uuid128[8], *(uint16_t *)&param->search_res.srvc_id.uuid.uuid.uuid128[6], *(uint64_t *)param->search_res.srvc_id.uuid.uuid.uuid128 & 0x0000FFFFFFFFFFFF);
+                break;
+            };
+            swallow_event = true;
         }
 
         // If service not found in list, add it
-        if (!found_service) {
+        if (store_service) {
             switch (param->search_res.srvc_id.uuid.len)
             {
             case ESP_UUID_LEN_16:
@@ -821,7 +854,6 @@ void esp_gattc_intercept_cb(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if, 
             new_service->next = service_elem_list;
             service_elem_list = new_service;
             ESP_LOGI(LOG_TAG, "[INTERCEPT] added service to list");
-            break;
         }
 
         break;
@@ -832,19 +864,16 @@ void esp_gattc_intercept_cb(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if, 
 
     /* If the gattc_if equal to profile A, call profile A cb handler,
      * so here call each profile's callback */
-    do
-    {
-        int idx;
-        for (idx = 0; idx < PROFILE_COUNT; idx++)
+    if (swallow_event) {
+        ESP_LOGW(LOG_TAG, "[INTERCEPT] swallowed event");
+    } else for (int idx = 0; idx < PROFILE_COUNT; idx++) {
+        if (gattc_if == ESP_GATT_IF_NONE || /* ESP_GATT_IF_NONE, not specify a certain gatt_if, need to call every profile cb function */
+            gattc_if == gl_profile_tab[idx].gattc_if)
         {
-            if (gattc_if == ESP_GATT_IF_NONE || /* ESP_GATT_IF_NONE, not specify a certain gatt_if, need to call every profile cb function */
-                gattc_if == gl_profile_tab[idx].gattc_if)
+            if (gl_profile_tab[idx].gattc_cb)
             {
-                if (gl_profile_tab[idx].gattc_cb)
-                {
-                    gl_profile_tab[idx].gattc_cb(event, gattc_if, param);
-                }
+                gl_profile_tab[idx].gattc_cb(event, gattc_if, param);
             }
         }
-    } while (0);
+    }
 }

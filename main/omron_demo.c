@@ -23,7 +23,6 @@
 #include <esp_bt.h>
 #include <esp_bt_main.h>
 #include <esp_gap_ble_api.h>
-#include <esp_gatt_common_api.h>
 #include <esp_gatt_defs.h>
 #include <esp_gattc_api.h>
 #include <esp_log.h>
@@ -133,7 +132,7 @@ void app_main(void)
     if ((req = NoteNewRequest("hub.set")))
     {
         JAddStringToObject(req, "product", PRODUCT_UID);
-        JAddStringToObject(req, "mode", "continuous");
+        JAddStringToObject(req, "mode", "periodic");
         JAddStringToObject(req, "sn", "omron-relay");
         if (!NoteRequestWithRetry(req, NOTECARD_REQUEST_TIMEOUT_S))
         {
@@ -171,7 +170,7 @@ void app_main(void)
         return;
     }
 
-    err = esp_ble_gattc_app_register(PROFILE_DIS_ID);
+    err = esp_ble_gattc_app_register(PROFILE_OMRON_ID);
     if (err)
     {
         ESP_LOGE(LOG_TAG, "%s gattc app register failed, error code = 0x%x\n", __func__, err);
@@ -182,13 +181,5 @@ void app_main(void)
     if (err)
     {
         ESP_LOGE(LOG_TAG, "set scan params error, error code = 0x%x", err);
-    }
-
-    // Establish the Maximum Transmission Unit (MTU) size
-    //TODO: Call before establishing a connection
-    err = esp_ble_gatt_set_local_mtu(REMOTE_BLE_4_0_MTU_SIZE);
-    if (err)
-    {
-        ESP_LOGE(LOG_TAG, "set local MTU failed, error code = 0x%x", err);
     }
 }

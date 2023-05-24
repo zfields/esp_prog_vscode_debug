@@ -15,12 +15,4 @@
     "esp_toolchain_path": "${config:esp_toolchain_root}/tools/xtensa-esp32-elf/esp-2022r1-11.2.0/xtensa-esp32-elf/bin",
 
     "esp_dev_env_path": "${config:esp_idf_tools}:${config:esp_binutils_path}:${config:esp_openocd_path}:${config:esp_python_path}:${config:esp_toolchain_path}:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-    "files.associations": {
-        "blm_collector.h": "c",
-        "esp_gap_ble_api.h": "c",
-        "gap_scan_flow.h": "c",
-        "omron_gap_scan.h": "c",
-        "omron_gatt_blm_collector_flow.h": "c",
-        "esp_bt_defs.h": "c"
-    }
 }

@@ -71,7 +71,7 @@ case ESP_GATTC_SEARCH_RES_EVT: {
     if (p_data->search_res.srvc_id.uuid.len == ESP_UUID_LEN_128) {
         if(memcmp(p_data->search_res.srvc_id.uuid.uuid.uuid128, gatts_xxx_uuid128, ESP_UUID_LEN_128) == 0){
             ESP_LOGI(GATTC_TAG, "service uuid128 found");
-            get_server = true;
+            fetch_characteristics = true;
             gl_profile_tab[PROFILE_X_APP_ID].service_start_handle = p_data->search_res.start_handle;
             gl_profile_tab[PROFILE_X_APP_ID].service_end_handle = p_data->search_res.end_handle;
         } else {

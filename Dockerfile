@@ -17,7 +17,7 @@ ARG UID=1000
 ARG USER=maker
 
 # POSIX compatible (Linux/Unix) base image
-FROM debian:stable-slim
+FROM debian:bullseye-slim
 
 # Import global arguments
 ARG DEBIAN_FRONTEND

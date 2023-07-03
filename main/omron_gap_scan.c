@@ -1,5 +1,7 @@
 #include "omron_gap_scan.h"
 
+//TODO: Reducing the scanning frequency
+
 // Include C standard libraries
 #include <string.h>
 
@@ -17,7 +19,7 @@
 #define LOG_TAG "GAP_SCAN"
 
 volatile bool connect = false;
-static const char remote_device_prefix[] = "BLEsmart_00000154";
+static const char remote_device_prefix[] = "BLESMART_00000154";
 
 void esp_gap_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param)
 {
@@ -254,7 +256,11 @@ void esp_gap_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param)
                 ESP_LOGI(LOG_TAG, "[%d][%d]", event, param->scan_rst.search_evt);
 
                 // Initiate GATT Connection
-                if ((adv_data != NULL) && ((char *)adv_data == strstr((char *)adv_data, remote_device_prefix))) {
+                ESP_LOGD(LOG_TAG, "[%d][%d]\tPrefix: %s", event, param->scan_rst.search_evt, remote_device_prefix);
+                ESP_LOGD(LOG_TAG, "[%d][%d]\tDevice: %s", event, param->scan_rst.search_evt, adv_data);
+
+                // Prefix must be validated case insensitive, due to bug in OMRON firmware
+                if ((adv_data != NULL) && ((char *)adv_data == strstr(strupr((char *)adv_data), remote_device_prefix))) {
                     ESP_LOGI(LOG_TAG, "[%d][%d] discovered a device matching \"%s\"", event, param->scan_rst.search_evt, remote_device_prefix);
 
                     if (connect) {

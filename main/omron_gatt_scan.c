@@ -266,13 +266,13 @@ void esp_gattc_common_cb(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if, esp
                 ESP_LOGI(LOG_TAG, "[%u][%d] characteristic count: %u", gattc_if, event, char_count);
 
                 // Allocate memory for the characteristic element array
-                ESP_LOGI(LOG_TAG, "[%u][%d] allocating characteristic array...", gattc_if, event);
+                ESP_LOGD(LOG_TAG, "[%u][%d] allocating characteristic array...", gattc_if, event);
                 char_elem_result = (esp_gattc_char_elem_t *)malloc(sizeof(esp_gattc_char_elem_t) * char_count);
                 if (!char_elem_result) {
                     ESP_LOGE(LOG_TAG, "[%u][%d] unable to allocate characteristic element array", gattc_if, event);
                     break;
                 }
-                ESP_LOGI(LOG_TAG, "[%u][%d] allocated characteristic array for %u items", gattc_if, event, char_count);
+                ESP_LOGD(LOG_TAG, "[%u][%d] allocated characteristic array for %u items", gattc_if, event, char_count);
 
                 // Populate the characteristic element array
                 ESP_LOGI(LOG_TAG, "[%u][%d] populating characteristic array...", gattc_if, event);
@@ -334,13 +334,13 @@ void esp_gattc_common_cb(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if, esp
                         ESP_LOGI(LOG_TAG, "[%u][%d][%u] descriptor count: %u", gattc_if, event, char_elem_result[i].char_handle, descr_count);
 
                         // Allocate memory for the descriptor element array
-                        ESP_LOGI(LOG_TAG, "[%u][%d][%u] allocating descriptor array...", gattc_if, event, char_elem_result[i].char_handle);
+                        ESP_LOGD(LOG_TAG, "[%u][%d][%u] allocating descriptor array...", gattc_if, event, char_elem_result[i].char_handle);
                         descr_elem_result = (esp_gattc_descr_elem_t *)malloc(sizeof(esp_gattc_descr_elem_t) * descr_count);
                         if (!descr_elem_result) {
                             ESP_LOGE(LOG_TAG, "[%u][%d][%u] unable to allocate descriptor array", gattc_if, event, char_elem_result[i].char_handle);
                             break;
                         }
-                        ESP_LOGI(LOG_TAG, "[%u][%d][%u] allocated descriptor array for %u items", gattc_if, event, char_elem_result[i].char_handle, descr_count);
+                        ESP_LOGD(LOG_TAG, "[%u][%d][%u] allocated descriptor array for %u items", gattc_if, event, char_elem_result[i].char_handle, descr_count);
 
                         // Populate the descriptor element array
                         ESP_LOGI(LOG_TAG, "[%u][%d][%u] populating descriptor array...", gattc_if, event, char_elem_result[i].char_handle);
@@ -354,7 +354,7 @@ void esp_gattc_common_cb(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if, esp
                             ESP_LOGE(LOG_TAG, "[%u][%d][%u] failed to populate descriptor array, error code = 0x%x", gattc_if, event, char_elem_result[i].char_handle, status);
                             free(descr_elem_result);
                             descr_elem_result = NULL;
-                            ESP_LOGI(LOG_TAG, "[%u][%d][%u] freed descriptor array", gattc_if, event, char_elem_result[i].char_handle);
+                            ESP_LOGD(LOG_TAG, "[%u][%d][%u] freed descriptor array", gattc_if, event, char_elem_result[i].char_handle);
                             break;
                         }
                         ESP_LOGI(LOG_TAG, "[%u][%d][%u] populated descriptor array with %u items", gattc_if, event, char_elem_result[i].char_handle, descr_count);
@@ -414,7 +414,7 @@ void esp_gattc_common_cb(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if, esp
                         // Free the descriptor element array
                         free(descr_elem_result);
                         descr_elem_result = NULL;
-                        ESP_LOGI(LOG_TAG, "[%u][%d][%u] freed descriptor array", gattc_if, event, char_elem_result[i].char_handle);
+                        ESP_LOGD(LOG_TAG, "[%u][%d][%u] freed descriptor array", gattc_if, event, char_elem_result[i].char_handle);
                     }
                     else {
                         ESP_LOGW(LOG_TAG, "[%u][%d][%u] no descriptors found", gattc_if, event, char_elem_result[i].char_handle);
@@ -467,7 +467,7 @@ void esp_gattc_common_cb(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if, esp
                 // Free the characteristic element array
                 free(char_elem_result);
                 char_elem_result = NULL;
-                ESP_LOGI(LOG_TAG, "[%u][%d] freed characteristic array", gattc_if, event);
+                ESP_LOGD(LOG_TAG, "[%u][%d] freed characteristic array", gattc_if, event);
             }
             else
             {

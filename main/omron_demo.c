@@ -6,10 +6,10 @@
 
 /****************************************************************************
  *
- * This demo showcases BLE GATT client. It can scan BLE devices and connect to one device.
- * Run the gatt_server demo, the client demo will automatically connect to the gatt_server demo.
- * Client demo will enable gatt_server's notify after connection. The two devices will then exchange
- * data.
+ * This demo showcases BLE GATT client. It can scan BLE devices and connect to
+ * one device. Run the gatt_server demo, the client demo will automatically
+ * connect to the gatt_server demo. Client demo will enable gatt_server's notify
+ * after connection. The two devices will then exchange data.
  *
  ****************************************************************************/
 
@@ -58,9 +58,9 @@ static esp_ble_scan_params_t ble_scan_params = {
     .scan_type = BLE_SCAN_TYPE_ACTIVE,
     .own_addr_type = BLE_ADDR_TYPE_PUBLIC,
     .scan_filter_policy = BLE_SCAN_FILTER_ALLOW_ONLY_WLST,
-    .scan_interval = 0x50,
+    .scan_interval = 0x3E8, // 1000 ms
     .scan_window = 0x30,
-    .scan_duplicate = BLE_SCAN_DUPLICATE_DISABLE
+    .scan_duplicate = BLE_SCAN_DUPLICATE_ENABLE
 };
 
 /* Declare static functions */

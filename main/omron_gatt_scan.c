@@ -140,14 +140,6 @@ void esp_gattc_common_cb(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if, esp
 
         // Report that the service discovery is now complete
         ESP_LOGI(LOG_TAG, "[%u][%d] service discovery is now complete for connection %u", gattc_if, event, param->dis_srvc_cmpl.conn_id);
-
-        // Enumerate the services
-        ESP_LOGI(LOG_TAG, "[%u][%d] enumerating services for connection %u...", gattc_if, event, param->dis_srvc_cmpl.conn_id);
-        esp_err_t err = esp_ble_gattc_search_service(gattc_if, param->dis_srvc_cmpl.conn_id, NULL);
-        if (err)
-        {
-            ESP_LOGE(LOG_TAG, "[%u][%d] failed to search service, error code = 0x%x", gattc_if, event, err);
-        }
         break;
     }
     case ESP_GATTC_CFG_MTU_EVT:
@@ -210,7 +202,7 @@ void esp_gattc_common_cb(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if, esp
 
         break;
     }
-    case ESP_GATTC_SEARCH_CMPL_EVT: // Called when all callbacks spawned from `esp_ble_gattc_search_service()` have completed 
+    case ESP_GATTC_SEARCH_CMPL_EVT: // Called when all callbacks spawned from `esp_ble_gattc_search_service()` have completed
     {
         if (ESP_GATT_OK != param->search_cmpl.status) {
             ESP_LOGE(LOG_TAG, "[%u] SEARCH_CMPL_EVT [%d]", gattc_if, event);
@@ -261,7 +253,7 @@ void esp_gattc_common_cb(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if, esp
                 ESP_LOGE(LOG_TAG, "[%u][%d] failed to get characteristic count, error code = 0x%x", gattc_if, event, status);
                 break;
             }
-            
+
             if (char_count > 0) {
                 ESP_LOGI(LOG_TAG, "[%u][%d] characteristic count: %u", gattc_if, event, char_count);
 
@@ -288,7 +280,7 @@ void esp_gattc_common_cb(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if, esp
                     break;
                 }
                 ESP_LOGI(LOG_TAG, "[%u][%d] populated characteristic array with %u items", gattc_if, event, char_count);
-                
+
                 for (size_t i = 0; i < char_count; ++i) {
                     ESP_LOGI(LOG_TAG, "[%u][%d]", gattc_if, event);
                     ESP_LOGI(LOG_TAG, "[%u][%d] Characteristic Handle: %u", gattc_if, event, char_elem_result[i].char_handle);
@@ -358,7 +350,7 @@ void esp_gattc_common_cb(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if, esp
                             break;
                         }
                         ESP_LOGI(LOG_TAG, "[%u][%d][%u] populated descriptor array with %u items", gattc_if, event, char_elem_result[i].char_handle, descr_count);
-                        
+
                         for (size_t j = 0; j < descr_count; ++j) {
                             ESP_LOGI(LOG_TAG, "[%u][%d][%u]", gattc_if, event, char_elem_result[i].char_handle);
                             ESP_LOGI(LOG_TAG, "[%u][%d][%u] Descriptor Handle: %u", gattc_if, event, char_elem_result[i].char_handle, descr_elem_result[j].handle);
@@ -624,21 +616,21 @@ void esp_gattc_common_cb(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if, esp
         }
 
         // Write to the descriptor
-        // if (ESP_UUID_LEN_16 == descr_elem_result.uuid.len && ESP_GATT_UUID_CHAR_CLIENT_CONFIG == descr_elem_result.uuid.uuid.uuid16)
-        // {
-        //     ESP_LOGI(LOG_TAG, "[%u][%d] enable the notification on descriptor %d...", gattc_if, event, descr_elem_result.handle);
-        //     status = esp_ble_gattc_write_char_descr(gattc_if,
-        //                                             gl_profile_tab[PROFILE_OMRON_ID].conn_id,
-        //                                             descr_elem_result.handle,
-        //                                             sizeof(CCCD_INDICATION_ENABLED),
-        //                                             (uint8_t *)&CCCD_INDICATION_ENABLED,
-        //                                             ESP_GATT_WRITE_TYPE_RSP,
-        //                                             ESP_GATT_AUTH_REQ_NONE);
-        //     if (ESP_GATT_OK != status) {
-        //         ESP_LOGE(LOG_TAG, "[%u][%d] failed to enable the notification, error code = 0x%x", gattc_if, event, status);
-        //         break;
-        //     }
-        // }
+        if (ESP_UUID_LEN_16 == descr_elem_result.uuid.len && ESP_GATT_UUID_CHAR_CLIENT_CONFIG == descr_elem_result.uuid.uuid.uuid16)
+        {
+            ESP_LOGI(LOG_TAG, "[%u][%d] enable the notification on descriptor %d...", gattc_if, event, descr_elem_result.handle);
+            status = esp_ble_gattc_write_char_descr(gattc_if,
+                                                    gl_profile_tab[PROFILE_OMRON_ID].conn_id,
+                                                    descr_elem_result.handle,
+                                                    sizeof(CCCD_INDICATION_ENABLED),
+                                                    (uint8_t *)&CCCD_INDICATION_ENABLED,
+                                                    ESP_GATT_WRITE_TYPE_RSP,
+                                                    ESP_GATT_AUTH_REQ_NONE);
+            if (ESP_GATT_OK != status) {
+                ESP_LOGE(LOG_TAG, "[%u][%d] failed to enable the notification, error code = 0x%x", gattc_if, event, status);
+                break;
+            }
+        }
 
         break;
     }
@@ -741,7 +733,6 @@ void esp_gattc_common_cb(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if, esp
         ESP_LOGI(LOG_TAG, "[%u][%d]", gattc_if, event);
 
         // Update connection state
-        connect = false;
         fetch_characteristics = false;
         break;
     }
@@ -778,11 +769,11 @@ void esp_gattc_intercept_cb(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if, 
     {
     case ESP_GATTC_REG_EVT:
     {
-        ESP_LOGI(LOG_TAG, "[INTERCEPT] intercepted REG_EVT [%u] on interface %u", event, gattc_if);
+        ESP_LOGD(LOG_TAG, "[INTERCEPT] intercepted REG_EVT [%u] on interface %u", event, gattc_if);
         if (param->reg.status == ESP_GATT_OK)
         {
             gl_profile_tab[param->reg.app_id].gattc_if = gattc_if;
-            ESP_LOGI(LOG_TAG, "[INTERCEPT] updated application (0x%04x) state, with interface %u", param->reg.app_id, gattc_if);
+            ESP_LOGD(LOG_TAG, "[INTERCEPT] updated application (0x%04x) state, with interface %u", param->reg.app_id, gattc_if);
         }
         else
         {
@@ -795,7 +786,7 @@ void esp_gattc_intercept_cb(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if, 
     }
     case ESP_GATTC_SEARCH_RES_EVT:
     {
-        ESP_LOGI(LOG_TAG, "[INTERCEPT] intercepted SEARCH_RES_EVT [%u] on interface %u", event, gattc_if);
+        ESP_LOGD(LOG_TAG, "[INTERCEPT] intercepted SEARCH_RES_EVT [%u] on interface %u", event, gattc_if);
 
         // Search list for valid service id or existing node with matching UUID
         bool store_service = false;
@@ -816,13 +807,13 @@ void esp_gattc_intercept_cb(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if, 
             switch (param->search_res.srvc_id.uuid.len)
             {
             case ESP_UUID_LEN_16:
-                ESP_LOGI(LOG_TAG, "[INTERCEPT] ignored service with UUID 0x%04X", param->search_res.srvc_id.uuid.uuid.uuid16);
+                ESP_LOGW(LOG_TAG, "[INTERCEPT] ignoring event for service with UUID 0x%04X", param->search_res.srvc_id.uuid.uuid.uuid16);
                 break;
             case ESP_UUID_LEN_32:
-                ESP_LOGI(LOG_TAG, "[INTERCEPT] ignored service with UUID 0x%08lX", param->search_res.srvc_id.uuid.uuid.uuid32);
+                ESP_LOGW(LOG_TAG, "[INTERCEPT] ignoring service with UUID 0x%08lX", param->search_res.srvc_id.uuid.uuid.uuid32);
                 break;
             case ESP_UUID_LEN_128:
-                ESP_LOGI(LOG_TAG, "[INTERCEPT] ignored service with UUID %08lX-%04X-%04X-%04X-%012llX", *(uint32_t *)&param->search_res.srvc_id.uuid.uuid.uuid128[12], *(uint16_t *)&param->search_res.srvc_id.uuid.uuid.uuid128[10], *(uint16_t *)&param->search_res.srvc_id.uuid.uuid.uuid128[8], *(uint16_t *)&param->search_res.srvc_id.uuid.uuid.uuid128[6], *(uint64_t *)param->search_res.srvc_id.uuid.uuid.uuid128 & 0x0000FFFFFFFFFFFF);
+                ESP_LOGW(LOG_TAG, "[INTERCEPT] ignoring service with UUID %08lX-%04X-%04X-%04X-%012llX", *(uint32_t *)&param->search_res.srvc_id.uuid.uuid.uuid128[12], *(uint16_t *)&param->search_res.srvc_id.uuid.uuid.uuid128[10], *(uint16_t *)&param->search_res.srvc_id.uuid.uuid.uuid128[8], *(uint16_t *)&param->search_res.srvc_id.uuid.uuid.uuid128[6], *(uint64_t *)param->search_res.srvc_id.uuid.uuid.uuid128 & 0x0000FFFFFFFFFFFF);
                 break;
             };
             swallow_event = true;
@@ -833,13 +824,13 @@ void esp_gattc_intercept_cb(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if, 
             switch (param->search_res.srvc_id.uuid.len)
             {
             case ESP_UUID_LEN_16:
-                ESP_LOGI(LOG_TAG, "[INTERCEPT] add service (0x%04X) to list...", param->search_res.srvc_id.uuid.uuid.uuid16);
+                ESP_LOGD(LOG_TAG, "[INTERCEPT] add service (0x%04X) to list...", param->search_res.srvc_id.uuid.uuid.uuid16);
                 break;
             case ESP_UUID_LEN_32:
-                ESP_LOGI(LOG_TAG, "[INTERCEPT] add service (0x%08lX) to list...", param->search_res.srvc_id.uuid.uuid.uuid32);
+                ESP_LOGD(LOG_TAG, "[INTERCEPT] add service (0x%08lX) to list...", param->search_res.srvc_id.uuid.uuid.uuid32);
                 break;
             case ESP_UUID_LEN_128:
-                ESP_LOGI(LOG_TAG, "[INTERCEPT] add service (%08lX-%04X-%04X-%04X-%012llX) to list...", *(uint32_t *)&param->search_res.srvc_id.uuid.uuid.uuid128[12], *(uint16_t *)&param->search_res.srvc_id.uuid.uuid.uuid128[10], *(uint16_t *)&param->search_res.srvc_id.uuid.uuid.uuid128[8], *(uint16_t *)&param->search_res.srvc_id.uuid.uuid.uuid128[6], *(uint64_t *)param->search_res.srvc_id.uuid.uuid.uuid128 & 0x0000FFFFFFFFFFFF);
+                ESP_LOGD(LOG_TAG, "[INTERCEPT] add service (%08lX-%04X-%04X-%04X-%012llX) to list...", *(uint32_t *)&param->search_res.srvc_id.uuid.uuid.uuid128[12], *(uint16_t *)&param->search_res.srvc_id.uuid.uuid.uuid128[10], *(uint16_t *)&param->search_res.srvc_id.uuid.uuid.uuid128[8], *(uint16_t *)&param->search_res.srvc_id.uuid.uuid.uuid128[6], *(uint64_t *)param->search_res.srvc_id.uuid.uuid.uuid128 & 0x0000FFFFFFFFFFFF);
                 break;
             };
             esp_gattc_service_elem_node_t * new_service = (esp_gattc_service_elem_node_t *)malloc(sizeof(esp_gattc_service_elem_node_t));
@@ -853,7 +844,7 @@ void esp_gattc_intercept_cb(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if, 
             // Push onto the front of the service list
             new_service->next = service_elem_list;
             service_elem_list = new_service;
-            ESP_LOGI(LOG_TAG, "[INTERCEPT] added service to list");
+            ESP_LOGD(LOG_TAG, "[INTERCEPT] added service to list");
         }
 
         break;
@@ -865,7 +856,7 @@ void esp_gattc_intercept_cb(esp_gattc_cb_event_t event, esp_gatt_if_t gattc_if, 
     /* If the gattc_if equal to profile A, call profile A cb handler,
      * so here call each profile's callback */
     if (swallow_event) {
-        ESP_LOGW(LOG_TAG, "[INTERCEPT] swallowed event");
+        ESP_LOGW(LOG_TAG, "[INTERCEPT] swallowed event %u on interface %u", event, gattc_if);
     } else for (int idx = 0; idx < PROFILE_COUNT; idx++) {
         if (gattc_if == ESP_GATT_IF_NONE || /* ESP_GATT_IF_NONE, not specify a certain gatt_if, need to call every profile cb function */
             gattc_if == gl_profile_tab[idx].gattc_if)

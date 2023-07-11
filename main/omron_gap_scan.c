@@ -18,7 +18,8 @@
 
 #define LOG_TAG "GAP_SCAN"
 
-volatile bool connect = false;
+volatile bool active_scan = false;
+volatile bool connecting = false;
 static const char remote_device_prefix[] = "BLESMART_00000154";
 
 void esp_gap_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param)
@@ -103,6 +104,7 @@ void esp_gap_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param)
         ESP_LOGI(LOG_TAG, "[%d]", event);
 
         // Start scanning for BLE devices
+        active_scan = true;
         const uint32_t duration_s = 30;
         ESP_LOGI(LOG_TAG, "[%d] begin scanning for BLE devices for %lu seconds...", event, duration_s);
         esp_ble_gap_start_scanning(duration_s);
@@ -255,6 +257,13 @@ void esp_gap_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param)
                 }
                 ESP_LOGI(LOG_TAG, "[%d][%d]", event, param->scan_rst.search_evt);
 
+                // Stop Scan
+                if (active_scan) {
+                    active_scan = false;
+                    ESP_LOGI(LOG_TAG, "[%d][%d] stopping scan...", event, param->scan_rst.search_evt);
+                    esp_ble_gap_stop_scanning();
+                }
+
                 // Initiate GATT Connection
                 ESP_LOGD(LOG_TAG, "[%d][%d]\tPrefix: %s", event, param->scan_rst.search_evt, remote_device_prefix);
                 ESP_LOGD(LOG_TAG, "[%d][%d]\tDevice: %s", event, param->scan_rst.search_evt, adv_data);
@@ -263,14 +272,10 @@ void esp_gap_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param)
                 if ((adv_data != NULL) && ((char *)adv_data == strstr(strupr((char *)adv_data), remote_device_prefix))) {
                     ESP_LOGI(LOG_TAG, "[%d][%d] discovered a device matching \"%s\"", event, param->scan_rst.search_evt, remote_device_prefix);
 
-                    if (connect) {
-                        ESP_LOGI(LOG_TAG, "[%d][%d] already connecting to a remote device...", event, param->scan_rst.search_evt);
+                    if (connecting) {
+                        ESP_LOGI(LOG_TAG, "[%d][%d] already connecting to remote device matching \"%s\"...", event, param->scan_rst.search_evt, remote_device_prefix);
                     } else {
-                        connect = true;
-
-                        // Stop Scan
-                        ESP_LOGI(LOG_TAG, "[%d][%d] stopping scan...", event, param->scan_rst.search_evt);
-                        esp_ble_gap_stop_scanning();
+                        connecting = true;
 
                         // Connect to Device
                         ESP_LOGI(LOG_TAG, "[%d][%d] establishing direct connection to remote device %02X:%02X:%02X:%02X:%02X:%02X...", event, param->scan_rst.search_evt, param->scan_rst.bda[0], param->scan_rst.bda[1], param->scan_rst.bda[2], param->scan_rst.bda[3], param->scan_rst.bda[4], param->scan_rst.bda[5]);
@@ -498,6 +503,14 @@ void esp_gap_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param)
         ESP_LOGI(LOG_TAG, "[%d]\tConnection Interval: %u", event, param->update_conn_params.conn_int);
         ESP_LOGI(LOG_TAG, "[%d]\tLink Timeout: %u0ms", event, param->update_conn_params.timeout);
         ESP_LOGI(LOG_TAG, "[%d]", event);
+
+        // Enumerate the services
+        ESP_LOGI(LOG_TAG, "[%d] enumerating services for connection %u...", event, gl_profile_tab[PROFILE_OMRON_ID].conn_id);
+        esp_err_t err = esp_ble_gattc_search_service(gl_profile_tab[PROFILE_OMRON_ID].gattc_if, gl_profile_tab[PROFILE_OMRON_ID].conn_id, NULL);
+        if (err)
+        {
+            ESP_LOGE(LOG_TAG, "[%d] failed to search services, error code = 0x%x", event, err);
+        }
         break;
 
     case ESP_GAP_BLE_SCAN_STOP_COMPLETE_EVT:
@@ -513,6 +526,7 @@ void esp_gap_cb(esp_gap_ble_cb_event_t event, esp_ble_gap_cb_param_t *param)
         ESP_LOGI(LOG_TAG, "[%d]", event);
 
         // Report Scan Status
+        connecting = false;
         ESP_LOGI(LOG_TAG, "[%d] scan stopped", event);
         break;
 
